@@ -108,7 +108,8 @@ class Backtester:
         
         self.max_positions = config['trading']['max_positions']
         self.max_daily_loss_pct = config['risk']['max_daily_loss_pct']
-        
+        self.max_risk_per_trade_pct = config['risk']['max_risk_per_trade_pct']
+
         self.equity = self.initial_capital
         self.peak_equity = self.initial_capital
         self.current_position = None
@@ -118,16 +119,38 @@ class Backtester:
         
     def calculate_slippage(self, entry_price: float, direction: int) -> float:
         """Calculate realistic slippage."""
-        slippage_amount = self.slippage_ticks * self.tick_value
-        
+        # FIXED: Use tick_size (points) not tick_value (dollars)
+        slippage_in_points = self.slippage_ticks * self.tick_size
+
         if direction == 1:
-            return entry_price + slippage_amount
+            return entry_price + slippage_in_points
         else:
-            return entry_price - slippage_amount
+            return entry_price - slippage_in_points
     
     def calculate_commission(self, size: int) -> float:
         """Calculate round-trip commission."""
         return self.commission_per_side * 2 * size
+
+    def calculate_position_size(self, entry_price: float, stop_loss: float) -> int:
+        """Calculate position size based on risk percentage."""
+        # Calculate dollar amount to risk (e.g., 1% of equity)
+        account_risk_dollars = self.equity * (self.max_risk_per_trade_pct / 100)
+
+        # Calculate stop distance in points and dollars
+        stop_distance_points = abs(entry_price - stop_loss)
+        stop_distance_dollars = stop_distance_points * self.point_value
+
+        # Avoid division by zero
+        if stop_distance_dollars == 0:
+            return 1
+
+        # Calculate position size
+        position_size = int(account_risk_dollars / stop_distance_dollars)
+
+        # Ensure at least 1 contract, cap at configured max
+        position_size = max(1, min(position_size, self.config['trading']['position_size']))
+
+        return position_size
     
     def check_daily_loss_limit(self, current_date: datetime) -> bool:
         """Check if max daily loss limit hit."""
@@ -219,12 +242,15 @@ class Backtester:
                     signal = current_bar['signal']
                     entry_price = current_bar['entry_price']
                     entry_price = self.calculate_slippage(entry_price, signal)
-                    
+
+                    # FIXED: Calculate position size based on risk %
+                    position_size = self.calculate_position_size(entry_price, current_bar['stop_loss'])
+
                     self.current_position = Trade(
                         entry_time=current_time,
                         entry_price=entry_price,
                         direction=signal,
-                        size=1,
+                        size=position_size,
                         stop_loss=current_bar['stop_loss'],
                         take_profit=current_bar['take_profit'],
                         strategy_name=self.strategy.get_name()

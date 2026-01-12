@@ -62,7 +62,18 @@ class VolatilityBreakoutStrategy(BaseStrategy):
         
         # Calculate range
         df['range'] = df['high'] - df['low']
-        
+
+        # ADDED: Volume filter - breakouts should have above-average volume
+        df['volume_ma'] = df['volume'].rolling(window=self.lookback_period).mean()
+        df['volume_ratio'] = df['volume'] / df['volume_ma']
+
+        # ADDED: Trend filter - use EMAs to identify trend direction
+        df['ema_50'] = self.calculate_ema(df['close'], 50)
+        df['ema_200'] = self.calculate_ema(df['close'], 200)
+        df['trend'] = 0
+        df.loc[df['ema_50'] > df['ema_200'], 'trend'] = 1  # Uptrend
+        df.loc[df['ema_50'] < df['ema_200'], 'trend'] = -1  # Downtrend
+
         return df
     
     def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -105,26 +116,48 @@ class VolatilityBreakoutStrategy(BaseStrategy):
             # Skip if indicators not ready
             if pd.isna(current_atr) or pd.isna(rolling_high):
                 continue
-            
-            # LONG SIGNAL: Volatility contracted + breakout above high
-            if is_contracted and current_close > rolling_high:
-                df.loc[df.index[i], 'signal'] = 1
-                df.loc[df.index[i], 'entry_price'] = rolling_high
-                df.loc[df.index[i], 'stop_loss'] = rolling_high - (self.stop_loss_mult * current_atr)
-                df.loc[df.index[i], 'take_profit'] = rolling_high + (self.take_profit_mult * current_atr)
-                
-                self.trades_today += 1
-                self.bars_since_trade = 0
-            
-            # SHORT SIGNAL: Volatility contracted + breakout below low
-            elif is_contracted and current_close < rolling_low:
-                df.loc[df.index[i], 'signal'] = -1
-                df.loc[df.index[i], 'entry_price'] = rolling_low
-                df.loc[df.index[i], 'stop_loss'] = rolling_low + (self.stop_loss_mult * current_atr)
-                df.loc[df.index[i], 'take_profit'] = rolling_low - (self.take_profit_mult * current_atr)
-                
-                self.trades_today += 1
-                self.bars_since_trade = 0
+
+            # FIXED: Enforce time filters (avoid first/last 15 minutes)
+            if not self.is_market_hours(current_bar.name, self.config.get('time_filters', {})):
+                continue
+
+            # ADDED: Volume filter - require above-average volume for breakouts
+            volume_ratio = current_bar.get('volume_ratio', 1.0)
+            if pd.isna(volume_ratio) or volume_ratio < 1.2:  # Volume must be 20% above average
+                continue
+
+            # ADDED: Get trend direction for filtering
+            trend = current_bar.get('trend', 0)
+
+            # LONG SIGNAL: Volatility contracted + breakout above high + in uptrend
+            if is_contracted and current_close > rolling_high and trend >= 0:  # Only LONG in uptrend or neutral
+                # Calculate breakout strength
+                breakout_strength = (current_close - rolling_high) / current_atr
+
+                # Require minimum breakout strength (avoid weak breakouts)
+                if breakout_strength >= 0.25:  # Must break by at least 25% of ATR
+                    df.loc[df.index[i], 'signal'] = 1
+                    df.loc[df.index[i], 'entry_price'] = current_close
+                    df.loc[df.index[i], 'stop_loss'] = current_close - (self.stop_loss_mult * current_atr)
+                    df.loc[df.index[i], 'take_profit'] = current_close + (self.take_profit_mult * current_atr)
+
+                    self.trades_today += 1
+                    self.bars_since_trade = 0
+
+            # SHORT SIGNAL: Volatility contracted + breakout below low + in downtrend
+            elif is_contracted and current_close < rolling_low and trend <= 0:  # Only SHORT in downtrend or neutral
+                # Calculate breakout strength
+                breakout_strength = (rolling_low - current_close) / current_atr
+
+                # Require minimum breakout strength
+                if breakout_strength >= 0.25:
+                    df.loc[df.index[i], 'signal'] = -1
+                    df.loc[df.index[i], 'entry_price'] = current_close
+                    df.loc[df.index[i], 'stop_loss'] = current_close + (self.stop_loss_mult * current_atr)
+                    df.loc[df.index[i], 'take_profit'] = current_close - (self.take_profit_mult * current_atr)
+
+                    self.trades_today += 1
+                    self.bars_since_trade = 0
         
         return df
     
