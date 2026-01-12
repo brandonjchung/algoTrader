@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+
+# Data files (too large for git)
+data/historical/*.csv
+data/historical/*.parquet
+
+# Logs and results
+logs/*.json
+logs/*.csv
+logs/*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Keep directory structure but not contents
+!data/historical/.gitkeep
+!logs/.gitkeep

@@ -1,0 +1,68 @@
+# Trading System Configuration
+
+# Trading Parameters
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+  
+# Contract Specifications (MES)
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+  
+# Costs
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+  
+# Risk Management
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+  
+# Time Filters
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 15
+  avoid_last_minutes: 15
+  no_overnight: true
+  
+# Strategy Parameters (Volatility Breakout)
+strategy:
+  name: "volatility_breakout"
+  lookback_period: 20
+  atr_period: 14
+  volatility_contraction_threshold: 0.7
+  breakout_buffer: 0.0
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 3.0
+  trailing_stop_atr_multiple: 1.5
+  max_bars_in_trade: 50
+  max_trades_per_day: 3
+  min_bars_between_trades: 5
+  
+# Data Settings
+data:
+  source: "yfinance"
+  timeframe: "5min"
+  start_date: "2023-01-01"
+  end_date: "2024-12-31"
+  
+# Backtesting
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+  
+# Logging
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/trading.log"
