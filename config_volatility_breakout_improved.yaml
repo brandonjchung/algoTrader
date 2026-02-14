@@ -1,0 +1,77 @@
+# IMPROVED Volatility Breakout Strategy Configuration
+# Key fixes: Loosened filters, Adaptive lookback, BB squeeze detection
+
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 15
+  avoid_last_minutes: 15
+  no_overnight: true
+
+strategy:
+  name: "volatility_breakout_improved"
+
+  # Adaptive Lookback
+  lookback_min: 10
+  lookback_max: 30
+
+  # Bollinger Bands for squeeze
+  bb_period: 20
+  bb_std: 2.0
+
+  # Volatility
+  atr_period: 14
+
+  # LOOSENED Filters
+  volume_threshold: 1.1          # Was 1.2
+  breakout_strength: 0.15        # Was 0.25 (ATR)
+
+  # Risk/Reward (WIDER for breakouts)
+  stop_loss_atr_multiple: 2.5
+  take_profit_atr_multiple: 4.0
+
+  # Trade Management
+  max_bars_in_trade: 60
+  max_trades_per_day: 3
+  min_bars_between_trades: 5
+
+  # Circuit Breaker
+  max_consecutive_losses: 5
+
+data:
+  source: "realistic_simulator"
+  timeframe: "5min"
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/breakout_improved.log"

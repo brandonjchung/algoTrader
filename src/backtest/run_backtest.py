@@ -16,6 +16,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from strategies.volatility_breakout import VolatilityBreakoutStrategy
 from strategies.mean_reversion_rsi import MeanReversionRSI
+from strategies.mean_reversion_improved import MeanReversionImproved
+from strategies.volatility_breakout_improved import VolatilityBreakoutImproved
+from strategies.statistical_arbitrage import StatisticalArbitrage
 from backtest.backtester import Backtester
 
 
@@ -170,6 +173,12 @@ def main():
         strategy = VolatilityBreakoutStrategy(config['strategy'])
     elif strategy_name == 'mean_reversion_rsi':
         strategy = MeanReversionRSI(config)
+    elif strategy_name == 'mean_reversion_improved':
+        strategy = MeanReversionImproved(config)
+    elif strategy_name == 'volatility_breakout_improved':
+        strategy = VolatilityBreakoutImproved(config)
+    elif strategy_name == 'statistical_arbitrage':
+        strategy = StatisticalArbitrage(config)
     else:
         print(f"ERROR: Unknown strategy: {strategy_name}")
         return
