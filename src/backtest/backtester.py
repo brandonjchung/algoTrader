@@ -228,11 +228,16 @@ class Backtester:
                     
                     commission = self.calculate_commission(self.current_position.size)
                     self.equity += self.current_position.pnl - commission
-                    
+
                     self.trades.append(self.current_position)
+
+                    # Track trade result for circuit breaker (if strategy supports it)
+                    if hasattr(self.strategy, 'record_trade_result'):
+                        self.strategy.record_trade_result(self.current_position.pnl)
+
                     self.current_position = None
                     bars_in_trade = 0
-                    
+
                     if len(self.trades) % 10 == 0:
                         print(f"  Completed {len(self.trades)} trades, Equity: ${self.equity:,.2f}")
             
