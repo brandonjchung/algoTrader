@@ -1,0 +1,79 @@
+# Mean Reversion Strategy Configuration
+
+# Trading Parameters
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1  # Max position size, actual size calculated by risk %
+  max_positions: 1
+
+# Contract Specifications (MES)
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+# Costs
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+# Risk Management
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+# Time Filters
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 15
+  avoid_last_minutes: 15
+  no_overnight: true
+
+# Strategy Parameters (Mean Reversion RSI)
+strategy:
+  name: "mean_reversion_rsi"
+
+  # RSI Settings
+  rsi_period: 14
+  rsi_oversold: 30      # Enter LONG when RSI < 30
+  rsi_overbought: 70    # Enter SHORT when RSI > 70
+  rsi_neutral: 50       # Exit when RSI returns to 50
+
+  # Mean Reference
+  ema_period: 20        # Price mean reference
+
+  # Volatility
+  atr_period: 14
+
+  # Risk/Reward
+  stop_loss_atr_multiple: 1.5    # Tighter stops for mean reversion
+  take_profit_atr_multiple: 2.0  # 1:1.33 risk/reward ratio
+
+  # Trade Management
+  max_bars_in_trade: 30          # Shorter hold time than breakout
+  max_trades_per_day: 5          # Allow more trades
+  min_bars_between_trades: 3     # Shorter wait between trades
+
+# Data Settings
+data:
+  source: "realistic_simulator"
+  timeframe: "5min"
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+
+# Backtesting
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+# Logging
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/mean_reversion.log"

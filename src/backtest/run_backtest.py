@@ -15,6 +15,7 @@ import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from strategies.volatility_breakout import VolatilityBreakoutStrategy
+from strategies.mean_reversion_rsi import MeanReversionRSI
 from backtest.backtester import Backtester
 
 
@@ -167,6 +168,8 @@ def main():
     
     if strategy_name == 'volatility_breakout':
         strategy = VolatilityBreakoutStrategy(config['strategy'])
+    elif strategy_name == 'mean_reversion_rsi':
+        strategy = MeanReversionRSI(config)
     else:
         print(f"ERROR: Unknown strategy: {strategy_name}")
         return
