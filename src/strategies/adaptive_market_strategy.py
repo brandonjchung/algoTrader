@@ -250,6 +250,39 @@ class AdaptiveMarketStrategy(BaseStrategy):
 
         return df
 
+    def get_exit_price(self, entry_price: float, stop_loss: float,
+                      take_profit: float, bars_in_trade: int,
+                      data_slice: pd.DataFrame) -> tuple:
+        """
+        Exit logic for mean reversion strategy
+
+        Returns: (exit_price, exit_reason)
+        """
+        current_bar = data_slice.iloc[0]
+        current_high = current_bar['high']
+        current_low = current_bar['low']
+        current_close = current_bar['close']
+
+        is_long = stop_loss < entry_price
+
+        # Check stop loss
+        if is_long and current_low <= stop_loss:
+            return stop_loss, 'stop_loss'
+        elif not is_long and current_high >= stop_loss:
+            return stop_loss, 'stop_loss'
+
+        # Check take profit (mean reversion to BB middle)
+        if is_long and current_high >= take_profit:
+            return take_profit, 'take_profit'
+        elif not is_long and current_low <= take_profit:
+            return take_profit, 'take_profit'
+
+        # Time-based exit (max 60 bars = 5 hours)
+        if bars_in_trade >= self.config.get('max_bars_in_trade', 60):
+            return current_close, 'time_exit'
+
+        return None, None
+
     def record_trade_result(self, pnl: float):
         """Track consecutive losses for circuit breaker"""
         self.daily_pnl += pnl
