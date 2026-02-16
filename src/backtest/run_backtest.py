@@ -19,6 +19,7 @@ from strategies.mean_reversion_rsi import MeanReversionRSI
 from strategies.mean_reversion_improved import MeanReversionImproved
 from strategies.volatility_breakout_improved import VolatilityBreakoutImproved
 from strategies.statistical_arbitrage import StatisticalArbitrage
+from strategies.adaptive_market_strategy import AdaptiveMarketStrategy
 from backtest.backtester import Backtester
 
 
@@ -188,6 +189,8 @@ def main():
         strategy = VolatilityBreakoutImproved(config)
     elif strategy_name == 'statistical_arbitrage':
         strategy = StatisticalArbitrage(config)
+    elif strategy_name == 'adaptive_market':
+        strategy = AdaptiveMarketStrategy(config['strategy'])
     else:
         print(f"ERROR: Unknown strategy: {strategy_name}")
         return
