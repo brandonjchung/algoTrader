@@ -110,10 +110,34 @@ class IBConnection:
 
         return contract
 
+    def _parse_duration_to_months(self, duration_str):
+        """Convert duration string to total months."""
+        duration_str = duration_str.strip()
+        parts = duration_str.split()
+
+        if len(parts) != 2:
+            raise ValueError(f"Invalid duration format: {duration_str}")
+
+        amount = int(parts[0])
+        unit = parts[1].upper()
+
+        if unit in ['Y', 'YEAR', 'YEARS']:
+            return amount * 12
+        elif unit in ['M', 'MONTH', 'MONTHS']:
+            return amount
+        elif unit in ['W', 'WEEK', 'WEEKS']:
+            return max(1, amount // 4)
+        elif unit in ['D', 'DAY', 'DAYS']:
+            return max(1, amount // 30)
+        else:
+            raise ValueError(f"Unknown duration unit: {unit}")
+
     def download_historical_data(self, contract, duration='5 Y', bar_size='5 mins',
                                  what_to_show='TRADES', use_rth=True):
         """
-        Download historical data from IB.
+        Download historical data from IB with auto-chunking for large requests.
+
+        Automatically breaks large requests into 3-month chunks to avoid timeouts.
 
         Args:
             contract: IB Contract object
@@ -130,6 +154,107 @@ class IBConnection:
         print(f"  Bar Size: {bar_size}")
         print(f"  Regular Hours Only: {use_rth}")
 
+        # Parse total months needed
+        try:
+            total_months = self._parse_duration_to_months(duration)
+        except ValueError as e:
+            print(f"❌ {e}")
+            return None
+
+        # Determine chunk size (3 months is safe for 5min bars)
+        chunk_months = 3
+
+        # If request is small enough, download directly
+        if total_months <= chunk_months:
+            print(f"  Downloading in single request...")
+            return self._download_single_chunk(
+                contract, duration, bar_size, what_to_show, use_rth
+            )
+
+        # Large request - chunk it
+        num_chunks = (total_months + chunk_months - 1) // chunk_months
+        print(f"  Large request detected: Breaking into {num_chunks} chunks of {chunk_months} months each")
+
+        all_data = []
+        end_date = datetime.now()
+
+        for chunk_num in range(num_chunks):
+            chunk_duration = f"{chunk_months} M"
+
+            print(f"\n  Chunk {chunk_num + 1}/{num_chunks}: Downloading {chunk_months} months ending {end_date.strftime('%Y-%m-%d')}...")
+
+            try:
+                # Download chunk
+                bars = self.ib.reqHistoricalData(
+                    contract,
+                    endDateTime=end_date.strftime('%Y%m%d %H:%M:%S'),
+                    durationStr=chunk_duration,
+                    barSizeSetting=bar_size,
+                    whatToShow=what_to_show,
+                    useRTH=use_rth,
+                    formatDate=1
+                )
+
+                if not bars:
+                    print(f"    ⚠️  No data returned for chunk {chunk_num + 1}")
+                    continue
+
+                # Convert to DataFrame
+                df_chunk = util.df(bars)
+                all_data.append(df_chunk)
+
+                print(f"    ✅ Downloaded {len(df_chunk)} bars")
+                print(f"       Range: {df_chunk['date'].min()} to {df_chunk['date'].max()}")
+
+                # Update end date for next chunk (move back 3 months)
+                end_date = df_chunk['date'].min() - timedelta(seconds=1)
+
+                # Rate limit: wait between chunks
+                if chunk_num < num_chunks - 1:
+                    time.sleep(2)
+
+            except Exception as e:
+                print(f"    ❌ Error downloading chunk {chunk_num + 1}: {e}")
+                if chunk_num == 0:  # If first chunk fails, abort
+                    return None
+                # Otherwise continue with what we have
+                break
+
+        if not all_data:
+            print("❌ No data retrieved from any chunk")
+            return None
+
+        # Combine all chunks
+        print(f"\n  Combining {len(all_data)} chunks...")
+        df = pd.concat(all_data, ignore_index=True)
+
+        # Remove duplicates and sort
+        df = df.drop_duplicates(subset=['date']).sort_values('date').reset_index(drop=True)
+
+        print(f"\n✅ Downloaded {len(df)} total bars")
+        print(f"   Date Range: {df['date'].min()} to {df['date'].max()}")
+        print(f"   Price Range: ${df['low'].min():.2f} to ${df['high'].max():.2f}")
+
+        # Rename columns to match our format
+        df = df.rename(columns={
+            'date': 'timestamp',
+            'open': 'open',
+            'high': 'high',
+            'low': 'low',
+            'close': 'close',
+            'volume': 'volume'
+        })
+
+        # Set timestamp as index
+        df = df.set_index('timestamp')
+
+        # Keep only OHLCV
+        df = df[['open', 'high', 'low', 'close', 'volume']]
+
+        return df
+
+    def _download_single_chunk(self, contract, duration, bar_size, what_to_show, use_rth):
+        """Download a single chunk of data (internal helper)."""
         try:
             # Request data
             bars = self.ib.reqHistoricalData(
