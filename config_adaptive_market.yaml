@@ -1,6 +1,34 @@
 # Adaptive Market Strategy Configuration
 # Optimized for Dec 2024 - Feb 2026 market conditions based on REAL data analysis
 
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 2.0  # Tighter than default
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 60  # Avoid first hour
+  avoid_last_minutes: 15
+  no_overnight: true
+
 strategy:
   name: "adaptive_market"
 
@@ -36,29 +64,23 @@ strategy:
   allowed_hours: [13, 16, 21]  # ONLY trade these hours
   avoid_hours: [14, 17, 19]    # NEVER trade these hours
 
+  # Trade Management
+  max_bars_in_trade: 60
+  min_bars_between_trades: 5
+
+data:
+  source: "ib_real_data"
+  timeframe: "5min"
+  start_date: "2024-12-20"
+  end_date: "2026-02-13"
+
 backtest:
-  initial_capital: 10000
-  position_size: 1
-  commission: 1.2  # $0.60 per side
-  slippage_ticks: 1
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
 
-# Contract specifications
-contract:
-  symbol: "MES"
-  tick_size: 0.25
-  tick_value: 1.25
-  point_value: 5.0
-  margin: 1200
-
-# Time filters
-time_filters:
-  start_time: "09:30"  # Market open
-  end_time: "16:00"    # Market close
-  avoid_first_minutes: 60  # Avoid first hour
-  avoid_last_minutes: 15   # Avoid last 15 min
-
-# Position management
-position:
-  max_holding_bars: 60  # Exit after 60 bars (5 hours) if no signal
-  trail_stop: false
-  scale_out: false
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/adaptive_market.log"
