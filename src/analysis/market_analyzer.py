@@ -27,7 +27,11 @@ def analyze_market_conditions(data_file):
     print(f"Loading data from {data_file}...")
     df = pd.read_csv(data_file, index_col=0, parse_dates=True)
 
-    # Remove timezone if present
+    # Ensure index is datetime (fix for IB data format with timezone)
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index, utc=True)
+
+    # Remove timezone info if present (convert to timezone-naive)
     if hasattr(df.index, 'tz') and df.index.tz is not None:
         df.index = df.index.tz_localize(None)
 
