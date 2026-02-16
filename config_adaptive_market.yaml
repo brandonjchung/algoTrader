@@ -1,0 +1,64 @@
+# Adaptive Market Strategy Configuration
+# Optimized for Dec 2024 - Feb 2026 market conditions based on REAL data analysis
+
+strategy:
+  name: "adaptive_market"
+
+  # Mean Reversion Parameters (for ranging markets - 73.8% of time)
+  rsi_period: 14
+  rsi_oversold: 30
+  rsi_overbought: 70
+  bb_period: 20
+  bb_std: 2.0
+
+  # Breakout Parameters (for trending markets - 26.2% of time)
+  breakout_lookback: 20
+  breakout_strength: 0.2  # ATR multiple
+  volume_threshold: 1.2
+
+  # Regime Detection
+  adx_period: 14
+  trending_threshold: 20  # ADX > 20 = trending, < 20 = ranging
+
+  # Risk Management (WIDER stops for ranging market)
+  atr_period: 14
+  stop_loss_atr_multiple: 3.0  # Increased from 2.5 (survive chop)
+  take_profit_atr_multiple: 3.5  # Adjusted
+
+  # Circuit Breaker
+  max_consecutive_losses: 5
+  max_daily_loss_pct: 2.0  # Stop trading if lose 2% in one day
+  max_trades_per_day: 3  # Limit trades to avoid overtrading
+
+  # TIME FILTERS (CRITICAL - based on market analysis)
+  # Best hours: 13:00 (+0.0164%), 16:00 (+0.0028%), 21:00 (+0.0032%)
+  # Worst hours: 14:00 (-0.0032%), 17:00 (-0.0034%), 19:00 (-0.0009%)
+  allowed_hours: [13, 16, 21]  # ONLY trade these hours
+  avoid_hours: [14, 17, 19]    # NEVER trade these hours
+
+backtest:
+  initial_capital: 10000
+  position_size: 1
+  commission: 1.2  # $0.60 per side
+  slippage_ticks: 1
+
+# Contract specifications
+contract:
+  symbol: "MES"
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin: 1200
+
+# Time filters
+time_filters:
+  start_time: "09:30"  # Market open
+  end_time: "16:00"    # Market close
+  avoid_first_minutes: 60  # Avoid first hour
+  avoid_last_minutes: 15   # Avoid last 15 min
+
+# Position management
+position:
+  max_holding_bars: 60  # Exit after 60 bars (5 hours) if no signal
+  trail_stop: false
+  scale_out: false
