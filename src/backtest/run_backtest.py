@@ -44,9 +44,13 @@ def load_data(filename: str) -> pd.DataFrame:
     
     data = pd.read_csv(filepath, index_col=0, parse_dates=True)
 
-    # Ensure index is datetime (fix for IB data format)
+    # Ensure index is datetime (fix for IB data format with timezone)
     if not isinstance(data.index, pd.DatetimeIndex):
-        data.index = pd.to_datetime(data.index)
+        data.index = pd.to_datetime(data.index, utc=True)
+
+    # Remove timezone info if present (convert to timezone-naive)
+    if hasattr(data.index, 'tz') and data.index.tz is not None:
+        data.index = data.index.tz_localize(None)
 
     print(f"Loaded {len(data)} bars from {filepath}")
 
