@@ -34,8 +34,8 @@ strategy:
 
   # Mean Reversion Parameters (for ranging markets - 73.8% of time)
   rsi_period: 14
-  rsi_oversold: 30
-  rsi_overbought: 70
+  rsi_oversold: 35  # Loosened from 30 (more trades)
+  rsi_overbought: 65  # Loosened from 70 (more trades)
   bb_period: 20
   bb_std: 2.0
 
