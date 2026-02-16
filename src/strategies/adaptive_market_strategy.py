@@ -224,9 +224,9 @@ class AdaptiveMarketStrategy(BaseStrategy):
             # === RANGING MARKET (73.8% of time) - USE MEAN REVERSION ===
             if not is_trending:
                 # LONG Signal: Oversold + at lower BB
+                # Removed volume filter - was blocking all trades
                 if (rsi < self.rsi_oversold and
-                    close < bb_lower and
-                    volume_ratio > 1.0):
+                    close < bb_lower):
 
                     df.at[df.index[i], 'signal'] = 1  # LONG
                     df.at[df.index[i], 'entry_price'] = close
@@ -236,9 +236,9 @@ class AdaptiveMarketStrategy(BaseStrategy):
                     self.trades_today += 1
 
                 # SHORT Signal: Overbought + at upper BB
+                # Removed volume filter - was blocking all trades
                 elif (rsi > self.rsi_overbought and
-                      close > bb_upper and
-                      volume_ratio > 1.0):
+                      close > bb_upper):
 
                     df.at[df.index[i], 'signal'] = -1  # SHORT
                     df.at[df.index[i], 'entry_price'] = close
