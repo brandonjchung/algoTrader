@@ -6,14 +6,26 @@ import pandas as pd
 import numpy as np
 
 # Load trades from most recent backtest
-trades_file = 'logs/trades_20260215_223509.csv'
+import glob
+import os
+
+# Find most recent trades file
+trades_files = glob.glob('logs/trades_*.csv')
+if not trades_files:
+    print("ERROR: No trades files found in logs/")
+    print("Run the backtest first to generate trades CSV")
+    import sys
+    sys.exit(1)
+
+# Get most recent
+trades_file = max(trades_files, key=os.path.getctime)
+print(f"Using: {trades_file}\n")
 
 try:
     df = pd.read_csv(trades_file)
     print(f"Loaded {len(df)} trades from adaptive strategy backtest\n")
 except:
-    print("ERROR: Could not find trades file")
-    print("Run the backtest first to generate trades CSV")
+    print(f"ERROR: Could not load {trades_file}")
     import sys
     sys.exit(1)
 
