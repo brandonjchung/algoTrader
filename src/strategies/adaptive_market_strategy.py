@@ -64,12 +64,25 @@ class AdaptiveMarketStrategy(BaseStrategy):
         self.max_daily_loss_pct = config.get('max_daily_loss_pct', 2.0)
         self.max_trades_per_day = config.get('max_trades_per_day', 3)
 
+        # V2 - Better SHORT filters
+        self.short_require_strong_signal = config.get('short_require_strong_signal', False)
+        self.short_min_bb_distance = config.get('short_min_bb_distance', 0.5)  # % above BB upper
+
+        # V2 - Profit protection with trailing stops
+        self.use_trailing_stop = config.get('use_trailing_stop', False)
+        self.trailing_stop_activation_atr = config.get('trailing_stop_activation_atr', 2.0)
+        self.trailing_stop_distance_atr = config.get('trailing_stop_distance_atr', 2.5)
+
         # State tracking
         self.consecutive_losses = 0
         self.circuit_breaker_active = False
         self.daily_pnl = 0
         self.trades_today = 0
         self.last_trade_date = None
+
+        # Track trade highs/lows for trailing stops
+        self.trade_high_water_mark = {}
+        self.trade_low_water_mark = {}
 
     def calculate_rsi(self, prices: pd.Series, period: int = 14) -> pd.Series:
         """Calculate RSI"""
@@ -230,8 +243,15 @@ class AdaptiveMarketStrategy(BaseStrategy):
                 self.trades_today += 1
 
             # SHORT Signal: Overbought + at upper BB
+            # V2: Added stricter filters for SHORT trades (was 38% win rate)
             elif (rsi > self.rsi_overbought and
                   close > bb_upper):
+
+                # V2: Additional filter for SHORT - must be WELL above BB upper
+                if self.short_require_strong_signal:
+                    bb_distance_pct = ((close - bb_upper) / bb_upper) * 100
+                    if bb_distance_pct < self.short_min_bb_distance:
+                        continue  # Skip SHORT if not far enough above BB
 
                 df.at[df.index[i], 'signal'] = -1  # SHORT
                 df.at[df.index[i], 'entry_price'] = close
@@ -255,6 +275,7 @@ class AdaptiveMarketStrategy(BaseStrategy):
                       data_slice: pd.DataFrame) -> tuple:
         """
         Exit logic for mean reversion strategy
+        V2: Added trailing stop logic for profit protection
 
         Returns: (exit_price, exit_reason)
         """
@@ -262,23 +283,83 @@ class AdaptiveMarketStrategy(BaseStrategy):
         current_high = current_bar['high']
         current_low = current_bar['low']
         current_close = current_bar['close']
+        current_atr = current_bar.get('atr', 0)
 
         is_long = stop_loss < entry_price
+        trade_id = entry_price  # Use entry_price as unique trade ID (max_positions=1)
+
+        # V2: Trailing stop logic
+        if self.use_trailing_stop and current_atr > 0:
+            # Initialize water marks for new trade
+            if trade_id not in self.trade_high_water_mark:
+                self.trade_high_water_mark[trade_id] = current_high if is_long else entry_price
+                self.trade_low_water_mark[trade_id] = entry_price if is_long else current_low
+
+            # Update water marks
+            if is_long:
+                self.trade_high_water_mark[trade_id] = max(
+                    self.trade_high_water_mark[trade_id], current_high
+                )
+                # Check if we've made enough profit to activate trailing stop
+                profit_atr = (self.trade_high_water_mark[trade_id] - entry_price) / current_atr
+                if profit_atr >= self.trailing_stop_activation_atr:
+                    # Calculate trailing stop
+                    trailing_stop = self.trade_high_water_mark[trade_id] - (
+                        self.trailing_stop_distance_atr * current_atr
+                    )
+                    # Use trailing stop if it's better than original stop
+                    if trailing_stop > stop_loss and current_low <= trailing_stop:
+                        # Clean up water marks
+                        del self.trade_high_water_mark[trade_id]
+                        return trailing_stop, 'trailing_stop'
+            else:  # SHORT
+                self.trade_low_water_mark[trade_id] = min(
+                    self.trade_low_water_mark[trade_id], current_low
+                )
+                # Check if we've made enough profit to activate trailing stop
+                profit_atr = (entry_price - self.trade_low_water_mark[trade_id]) / current_atr
+                if profit_atr >= self.trailing_stop_activation_atr:
+                    # Calculate trailing stop
+                    trailing_stop = self.trade_low_water_mark[trade_id] + (
+                        self.trailing_stop_distance_atr * current_atr
+                    )
+                    # Use trailing stop if it's better than original stop
+                    if trailing_stop < stop_loss and current_high >= trailing_stop:
+                        # Clean up water marks
+                        del self.trade_low_water_mark[trade_id]
+                        return trailing_stop, 'trailing_stop'
 
         # Check stop loss
         if is_long and current_low <= stop_loss:
+            # Clean up water marks
+            if trade_id in self.trade_high_water_mark:
+                del self.trade_high_water_mark[trade_id]
             return stop_loss, 'stop_loss'
         elif not is_long and current_high >= stop_loss:
+            # Clean up water marks
+            if trade_id in self.trade_low_water_mark:
+                del self.trade_low_water_mark[trade_id]
             return stop_loss, 'stop_loss'
 
         # Check take profit (mean reversion to BB middle)
         if is_long and current_high >= take_profit:
+            # Clean up water marks
+            if trade_id in self.trade_high_water_mark:
+                del self.trade_high_water_mark[trade_id]
             return take_profit, 'take_profit'
         elif not is_long and current_low <= take_profit:
+            # Clean up water marks
+            if trade_id in self.trade_low_water_mark:
+                del self.trade_low_water_mark[trade_id]
             return take_profit, 'take_profit'
 
         # Time-based exit (max 60 bars = 5 hours)
         if bars_in_trade >= self.config.get('max_bars_in_trade', 60):
+            # Clean up water marks
+            if trade_id in self.trade_high_water_mark:
+                del self.trade_high_water_mark[trade_id]
+            if trade_id in self.trade_low_water_mark:
+                del self.trade_low_water_mark[trade_id]
             return current_close, 'time_exit'
 
         return None, None
