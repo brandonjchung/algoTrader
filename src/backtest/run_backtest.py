@@ -43,8 +43,13 @@ def load_data(filename: str) -> pd.DataFrame:
         return None
     
     data = pd.read_csv(filepath, index_col=0, parse_dates=True)
+
+    # Ensure index is datetime (fix for IB data format)
+    if not isinstance(data.index, pd.DatetimeIndex):
+        data.index = pd.to_datetime(data.index)
+
     print(f"Loaded {len(data)} bars from {filepath}")
-    
+
     return data
 
 
