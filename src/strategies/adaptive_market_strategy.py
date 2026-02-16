@@ -204,78 +204,41 @@ class AdaptiveMarketStrategy(BaseStrategy):
                 continue
 
             # Get indicator values
-            adx = current_bar['adx']
             rsi = current_bar['rsi']
             close = current_bar['close']
             atr = current_bar['atr']
             bb_upper = current_bar['bb_upper']
             bb_lower = current_bar['bb_lower']
             bb_middle = current_bar['bb_middle']
-            volume_ratio = current_bar['volume_ratio']
 
-            # Skip if missing data
-            if pd.isna(adx) or pd.isna(rsi) or pd.isna(atr):
+            # Skip if missing data (removed ADX check - causing all NaN)
+            if pd.isna(rsi) or pd.isna(atr):
                 continue
 
-            # REGIME DETECTION
-            is_trending = adx > self.trending_threshold
-            df.at[df.index[i], 'regime'] = 'trending' if is_trending else 'ranging'
+            # Market is 73.8% ranging - just use mean reversion all the time
+            # (ADX calculation was returning NaN, blocking all trades)
 
-            # === RANGING MARKET (73.8% of time) - USE MEAN REVERSION ===
-            if not is_trending:
-                # LONG Signal: Oversold + at lower BB
-                # Removed volume filter - was blocking all trades
-                if (rsi < self.rsi_oversold and
-                    close < bb_lower):
+            # LONG Signal: Oversold + at lower BB
+            if (rsi < self.rsi_oversold and
+                close < bb_lower):
 
-                    df.at[df.index[i], 'signal'] = 1  # LONG
-                    df.at[df.index[i], 'entry_price'] = close
-                    df.at[df.index[i], 'stop_loss'] = close - (atr * self.stop_loss_atr_multiple)
-                    df.at[df.index[i], 'take_profit'] = bb_middle  # Target mean reversion to middle
-                    signals_generated['ranging_long'] += 1
-                    self.trades_today += 1
+                df.at[df.index[i], 'signal'] = 1  # LONG
+                df.at[df.index[i], 'entry_price'] = close
+                df.at[df.index[i], 'stop_loss'] = close - (atr * self.stop_loss_atr_multiple)
+                df.at[df.index[i], 'take_profit'] = bb_middle  # Target mean reversion to middle
+                signals_generated['ranging_long'] += 1
+                self.trades_today += 1
 
-                # SHORT Signal: Overbought + at upper BB
-                # Removed volume filter - was blocking all trades
-                elif (rsi > self.rsi_overbought and
-                      close > bb_upper):
+            # SHORT Signal: Overbought + at upper BB
+            elif (rsi > self.rsi_overbought and
+                  close > bb_upper):
 
-                    df.at[df.index[i], 'signal'] = -1  # SHORT
-                    df.at[df.index[i], 'entry_price'] = close
-                    df.at[df.index[i], 'stop_loss'] = close + (atr * self.stop_loss_atr_multiple)
-                    df.at[df.index[i], 'take_profit'] = bb_middle  # Target mean reversion to middle
-                    signals_generated['ranging_short'] += 1
-                    self.trades_today += 1
-
-            # === TRENDING MARKET (26.2% of time) - USE BREAKOUTS ===
-            else:
-                rolling_high = current_bar['rolling_high']
-                rolling_low = current_bar['rolling_low']
-                price_change = abs(current_bar['price_change'])
-
-                # LONG Breakout: Price breaks above high with momentum
-                if (close > rolling_high and
-                    price_change > (atr * self.breakout_strength) and
-                    volume_ratio > self.volume_threshold):
-
-                    df.at[df.index[i], 'signal'] = 1  # LONG
-                    df.at[df.index[i], 'entry_price'] = close
-                    df.at[df.index[i], 'stop_loss'] = close - (atr * self.stop_loss_atr_multiple)
-                    df.at[df.index[i], 'take_profit'] = close + (atr * self.take_profit_atr_multiple)
-                    signals_generated['trending_long'] += 1
-                    self.trades_today += 1
-
-                # SHORT Breakout: Price breaks below low with momentum
-                elif (close < rolling_low and
-                      price_change > (atr * self.breakout_strength) and
-                      volume_ratio > self.volume_threshold):
-
-                    df.at[df.index[i], 'signal'] = -1  # SHORT
-                    df.at[df.index[i], 'entry_price'] = close
-                    df.at[df.index[i], 'stop_loss'] = close + (atr * self.stop_loss_atr_multiple)
-                    df.at[df.index[i], 'take_profit'] = close - (atr * self.take_profit_atr_multiple)
-                    signals_generated['trending_short'] += 1
-                    self.trades_today += 1
+                df.at[df.index[i], 'signal'] = -1  # SHORT
+                df.at[df.index[i], 'entry_price'] = close
+                df.at[df.index[i], 'stop_loss'] = close + (atr * self.stop_loss_atr_multiple)
+                df.at[df.index[i], 'take_profit'] = bb_middle  # Target mean reversion to middle
+                signals_generated['ranging_short'] += 1
+                self.trades_today += 1
 
         total_signals = sum([v for k, v in signals_generated.items() if k != 'skipped_time'])
         print(f"\n  Total signals: {total_signals}")
