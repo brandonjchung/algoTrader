@@ -7,7 +7,11 @@ import numpy as np
 # Load data
 df = pd.read_csv('data/historical/MES_5mins_2024-12-20_to_2026-02-13_REAL.csv', index_col=0, parse_dates=True)
 
-# Remove timezone
+# Ensure index is datetime (fix for IB data format with timezone)
+if not isinstance(df.index, pd.DatetimeIndex):
+    df.index = pd.to_datetime(df.index, utc=True)
+
+# Remove timezone info if present (convert to timezone-naive)
 if hasattr(df.index, 'tz') and df.index.tz is not None:
     df.index = df.index.tz_localize(None)
 
