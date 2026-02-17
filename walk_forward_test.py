@@ -36,7 +36,11 @@ class WalkForwardTester:
 
         # Load data to determine date ranges
         df = pd.read_csv(f"data/historical/{data_file}")
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        # Handle timezone-aware IB data
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+        # Convert to timezone-naive for easier handling
+        if df['timestamp'].dt.tz is not None:
+            df['timestamp'] = df['timestamp'].dt.tz_localize(None)
 
         self.start_date = df['timestamp'].min()
         self.end_date = df['timestamp'].max()
@@ -107,7 +111,11 @@ class WalkForwardTester:
         """
         # Load full dataset
         df = pd.read_csv(f"data/historical/{self.data_file}")
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        # Handle timezone-aware IB data
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+        # Convert to timezone-naive for easier handling
+        if df['timestamp'].dt.tz is not None:
+            df['timestamp'] = df['timestamp'].dt.tz_localize(None)
 
         # Filter to period
         mask = (df['timestamp'] >= start_date) & (df['timestamp'] <= end_date)

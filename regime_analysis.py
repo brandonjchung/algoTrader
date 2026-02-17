@@ -29,12 +29,19 @@ class RegimeAnalyzer:
         """
         # Load trades
         self.trades = pd.read_csv(trades_file)
-        self.trades['entry_time'] = pd.to_datetime(self.trades['entry_time'])
-        self.trades['exit_time'] = pd.to_datetime(self.trades['exit_time'])
+        self.trades['entry_time'] = pd.to_datetime(self.trades['entry_time'], utc=True)
+        self.trades['exit_time'] = pd.to_datetime(self.trades['exit_time'], utc=True)
+        # Convert to timezone-naive
+        if self.trades['entry_time'].dt.tz is not None:
+            self.trades['entry_time'] = self.trades['entry_time'].dt.tz_localize(None)
+            self.trades['exit_time'] = self.trades['exit_time'].dt.tz_localize(None)
 
         # Load market data
         self.data = pd.read_csv(f"data/historical/{data_file}")
-        self.data['timestamp'] = pd.to_datetime(self.data['timestamp'])
+        self.data['timestamp'] = pd.to_datetime(self.data['timestamp'], utc=True)
+        # Convert to timezone-naive
+        if self.data['timestamp'].dt.tz is not None:
+            self.data['timestamp'] = self.data['timestamp'].dt.tz_localize(None)
         self.data = self.data.set_index('timestamp')
 
         # Calculate equity curve
