@@ -131,6 +131,7 @@ class WalkForwardTester:
     def run_backtest(self, period_name, period_data_file):
         """
         Run backtest on a specific period.
+        Parses results directly from stdout for reliability.
 
         Args:
             period_name: Name of period (train/test/validate)
@@ -143,6 +144,10 @@ class WalkForwardTester:
         print(f"Running backtest: {period_name.upper()}")
         print(f"{'='*60}")
 
+        # Record timestamp before running so we only pick up NEW result files
+        import time
+        time_before = time.time()
+
         # Run backtest
         cmd = [
             'python', 'src/backtest/run_backtest.py',
@@ -150,32 +155,92 @@ class WalkForwardTester:
             '--data-file', period_data_file
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding='utf-8', errors='replace')
+
+        output = result.stdout + result.stderr
 
         if result.returncode != 0:
-            print(f"❌ Backtest failed: {result.stderr}")
-            return None
+            print(f"  Backtest output:\n{output[:500]}")
+            print(f"  ❌ Backtest failed (exit code {result.returncode})")
 
-        # Find most recent results file
+        # Parse results from stdout (more reliable than JSON file parsing)
+        metrics = self._parse_stdout_results(period_name, output)
+
+        if metrics and metrics['total_trades'] > 0:
+            print(f"  ✅ {metrics['total_trades']} trades, "
+                  f"{metrics['total_return_pct']:.2f}% return, "
+                  f"{metrics['win_rate']:.1f}% win rate")
+        else:
+            # Fallback: try to read JSON file
+            metrics = self._parse_json_results(period_name, time_before)
+
+            if metrics and metrics['total_trades'] > 0:
+                print(f"  ✅ {metrics['total_trades']} trades, "
+                      f"{metrics['total_return_pct']:.2f}% return")
+            else:
+                print(f"  ⚠️  0 trades generated for {period_name} period")
+                metrics = {
+                    'period': period_name,
+                    'total_return_pct': 0, 'sharpe_ratio': 0,
+                    'max_drawdown_pct': 0, 'total_trades': 0,
+                    'win_rate': 0, 'profit_factor': 0,
+                    'avg_win': 0, 'avg_loss': 0
+                }
+
+        return metrics
+
+    def _parse_stdout_results(self, period_name, output):
+        """Parse backtest results from stdout text."""
+        import re
+
+        metrics = {'period': period_name}
+
+        # Parse key metrics from the printed output
+        patterns = {
+            'total_return_pct': r'Total Return:\s+([-\d.]+)%',
+            'sharpe_ratio': r'Sharpe Ratio:\s+([-\d.]+)',
+            'max_drawdown_pct': r'Max Drawdown:\s+([-\d.]+)%',
+            'total_trades': r'Total Trades:\s+(\d+)',
+            'win_rate': r'Win Rate:\s+([-\d.]+)%',
+            'profit_factor': r'Profit Factor:\s+([-\d.]+)',
+            'avg_win': r'Avg Win: \$\s*([-\d.,]+)',
+            'avg_loss': r'Avg Loss: \$\s*([-\d.,]+)',
+        }
+
+        for key, pattern in patterns.items():
+            match = re.search(pattern, output)
+            if match:
+                val = match.group(1).replace(',', '')
+                metrics[key] = float(val) if '.' in val else int(val)
+            else:
+                metrics[key] = 0
+
+        return metrics if metrics.get('total_trades', 0) > 0 else None
+
+    def _parse_json_results(self, period_name, time_before):
+        """Fallback: parse results from JSON file."""
         logs_dir = Path('logs')
-        result_files = sorted(logs_dir.glob('backtest_*.json'), key=os.path.getmtime, reverse=True)
+        result_files = sorted(
+            [f for f in logs_dir.glob('backtest_*.json')
+             if os.path.getmtime(f) > time_before],
+            key=os.path.getmtime, reverse=True
+        )
 
         if not result_files:
-            print("❌ No results file found")
             return None
 
-        # Load results
         with open(result_files[0], 'r') as f:
             results = json.load(f)
 
-        # Extract key metrics (results are in flat structure, not nested)
+        # Try flat structure first, then nested
         metrics = {
             'period': period_name,
             'total_return_pct': results.get('total_return_pct', 0),
             'sharpe_ratio': results.get('sharpe_ratio', 0),
             'max_drawdown_pct': results.get('max_drawdown_pct', 0),
             'total_trades': results.get('total_trades', 0),
-            'win_rate': results.get('win_rate_pct', 0),
+            'win_rate': results.get('win_rate_pct', results.get('win_rate', 0)),
             'profit_factor': results.get('profit_factor', 0),
             'avg_win': results.get('avg_win', 0),
             'avg_loss': results.get('avg_loss', 0)
