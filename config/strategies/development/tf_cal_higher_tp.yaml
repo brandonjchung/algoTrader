@@ -1,0 +1,28 @@
+# Test C: Higher take profit target (6x ATR instead of 4x)
+# Hypothesis: 4x ATR target is hit ~50% of the time but we give back too much
+# on trailing exits. Higher TP with wider trail lets trends develop fully.
+# Change from tf_mes_strict: take_profit_atr_multiple: 4.0 -> 6.0
+
+strategy:
+  name: "trend_following"
+  breakout_period: 40
+  breakout_atr_buffer: 0.25
+  adx_period: 14
+  adx_min_threshold: 25
+  min_volume_ratio: 1.5
+  atr_period: 14
+  min_atr_for_entry: 3.0
+  max_atr_for_entry: 12.0
+  require_momentum_close: true
+  momentum_close_pct: 0.75
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 6.0
+  use_trailing_stop: true
+  trailing_stop_atr: 2.5
+  allowed_hours: [14, 15, 16, 17, 18, 19, 20]
+  max_trades_per_day: 1
+  max_consecutive_losses: 4
+  max_bars_in_trade: 60
+
+logging:
+  log_file: "logs/tf_cal_higher_tp.log"

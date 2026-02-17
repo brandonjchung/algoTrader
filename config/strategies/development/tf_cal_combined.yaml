@@ -1,0 +1,27 @@
+# Combined best: Higher TP (6x) + ADX 30 + No trailing stop
+# Hypothesis: higher TP lets trends fully develop, ADX 30 ensures strong trend
+# context, removing trailing stop lets winners reach the full 6x target.
+# Expected: WR 60%+, PF 2.0+, avg win 2-3x avg loss
+
+strategy:
+  name: "trend_following"
+  breakout_period: 40
+  breakout_atr_buffer: 0.25
+  adx_period: 14
+  adx_min_threshold: 30
+  min_volume_ratio: 1.5
+  atr_period: 14
+  min_atr_for_entry: 3.0
+  max_atr_for_entry: 12.0
+  require_momentum_close: true
+  momentum_close_pct: 0.75
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 6.0
+  use_trailing_stop: false
+  allowed_hours: [14, 15, 16, 17, 18, 19, 20]
+  max_trades_per_day: 1
+  max_consecutive_losses: 4
+  max_bars_in_trade: 60
+
+logging:
+  log_file: "logs/tf_cal_combined.log"
