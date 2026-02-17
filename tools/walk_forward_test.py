@@ -70,7 +70,7 @@ class WalkForwardTester:
 
         # Ensure we don't exceed data range
         if validate_end > self.end_date:
-            print("⚠️  Warning: Not enough data for full split")
+            print("[WARN]  Warning: Not enough data for full split")
             # Adjust proportionally
             total_available_days = self.total_days
             train_days = int(total_available_days * (train_months / total_months))
@@ -162,13 +162,13 @@ class WalkForwardTester:
 
         if result.returncode != 0:
             print(f"  Backtest output:\n{output[:500]}")
-            print(f"  ❌ Backtest failed (exit code {result.returncode})")
+            print(f"  [FAIL] Backtest failed (exit code {result.returncode})")
 
         # Parse results from stdout (more reliable than JSON file parsing)
         metrics = self._parse_stdout_results(period_name, output)
 
         if metrics and metrics['total_trades'] > 0:
-            print(f"  ✅ {metrics['total_trades']} trades, "
+            print(f"  [OK] {metrics['total_trades']} trades, "
                   f"{metrics['total_return_pct']:.2f}% return, "
                   f"{metrics['win_rate']:.1f}% win rate")
         else:
@@ -176,10 +176,10 @@ class WalkForwardTester:
             metrics = self._parse_json_results(period_name, time_before)
 
             if metrics and metrics['total_trades'] > 0:
-                print(f"  ✅ {metrics['total_trades']} trades, "
+                print(f"  [OK] {metrics['total_trades']} trades, "
                       f"{metrics['total_return_pct']:.2f}% return")
             else:
-                print(f"  ⚠️  0 trades generated for {period_name} period")
+                print(f"  [WARN]  0 trades generated for {period_name} period")
                 metrics = {
                     'period': period_name,
                     'total_return_pct': 0, 'sharpe_ratio': 0,
@@ -363,16 +363,16 @@ class WalkForwardTester:
             test_ret = results['test']['total_return_pct']
             degradation = train_ret - test_ret
 
-            print(f"\nTrain → Test Degradation: {degradation:.2f}%")
+            print(f"\nTrain -> Test Degradation: {degradation:.2f}%")
 
             if degradation < 2:
-                print("  ✅ Excellent - strategy generalizes well")
+                print("  [OK] Excellent - strategy generalizes well")
             elif degradation < 5:
-                print("  ✅ Good - acceptable degradation")
+                print("  [OK] Good - acceptable degradation")
             elif degradation < 10:
-                print("  ⚠️  Warning - significant degradation, possible overfitting")
+                print("  [WARN]  Warning - significant degradation, possible overfitting")
             else:
-                print("  ❌ FAIL - severe degradation, likely overfit to train period")
+                print("  [FAIL] FAIL - severe degradation, likely overfit to train period")
 
             # Sharpe comparison
             train_sharpe = results['train']['sharpe_ratio']
@@ -383,9 +383,9 @@ class WalkForwardTester:
             print(f"  Test:  {test_sharpe:.2f}")
 
             if test_sharpe >= train_sharpe * 0.8:
-                print("  ✅ Sharpe maintained - robust strategy")
+                print("  [OK] Sharpe maintained - robust strategy")
             else:
-                print("  ❌ Sharpe collapsed - not robust")
+                print("  [FAIL] Sharpe collapsed - not robust")
 
         if 'validate' in results:
             print(f"\nValidation Period (FINAL CHECK):")
@@ -396,11 +396,11 @@ class WalkForwardTester:
             print(f"  Sharpe: {val_sharpe:.2f}")
 
             if val_ret > 5 and val_sharpe > 1.0:
-                print("  ✅ PASS - Strategy approved for live trading consideration")
+                print("  [OK] PASS - Strategy approved for live trading consideration")
             elif val_ret > 0 and val_sharpe > 0.5:
-                print("  ⚠️  MARGINAL - Strategy needs improvement")
+                print("  [WARN]  MARGINAL - Strategy needs improvement")
             else:
-                print("  ❌ FAIL - Strategy not ready for live trading")
+                print("  [FAIL] FAIL - Strategy not ready for live trading")
 
         print("\n" + "="*60 + "\n")
 
