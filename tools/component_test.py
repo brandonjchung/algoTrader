@@ -26,15 +26,15 @@ TESTS = {
         'description': 'V1 + ATR filter (current best)',
         'change': 'None (baseline)',
     },
-    'volume_filter': {
-        'config': 'config/strategies/test_volume_filter.yaml',
-        'description': 'V1+ATR with volume confirmation',
-        'change': 'Require volume_ratio >= 1.2 at entry',
+    'low_volume': {
+        'config': 'config/strategies/test_low_volume_filter.yaml',
+        'description': 'V1+ATR only on low volume (<0.9x avg)',
+        'change': 'max_volume_ratio: 0.9 (low-volume entries only)',
     },
-    'bb_width_filter': {
-        'config': 'config/strategies/test_bb_width_filter.yaml',
-        'description': 'V1+ATR with BB width filter',
-        'change': 'Require BB width >= 1.2% of price at entry',
+    'bb_width_07': {
+        'config': 'config/strategies/test_bb_width_07.yaml',
+        'description': 'V1+ATR with BB width >= 0.7% (recalibrated)',
+        'change': 'min_bb_width_pct: 0.7 (was 1.2 - miscalibrated)',
     },
     'no_friday': {
         'config': 'config/strategies/test_no_friday.yaml',

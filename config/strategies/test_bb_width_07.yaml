@@ -1,0 +1,108 @@
+# TEST: BB width filter (recalibrated for MES real data)
+# SINGLE CHANGE from v1_atr_filter: min_bb_width_pct: 0.7
+#
+# Round 3 test used 1.2% - miscalibrated for ES simulated data.
+# Real MES data has narrower BB widths. Run calibrate_filters.py to confirm.
+# Typical MES BB width at signal-eligible bars is ~0.4-0.8%.
+# Using 0.7% targets the top ~30% most extended band conditions.
+#
+# Hypothesis: Wider BB = more stretched from mean = stronger reversion pull.
+# Only trade when price is genuinely dislocated (BB > 0.7% of price),
+# not just touching the band on a narrow, low-conviction range.
+#
+# NOTE: If calibrate_filters.py shows the median BB width is < 0.7%,
+# this filter will still be too aggressive. Use 50th-60th percentile value.
+#
+# CHANGE LOG (vs v1_atr_filter.yaml):
+#   ADDED: min_bb_width_pct: 0.7  (was 1.2 in round 3 - too high)
+#   NOTHING ELSE CHANGED
+
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 2.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 60
+  avoid_last_minutes: 15
+  no_overnight: true
+
+strategy:
+  name: "adaptive_market"
+
+  rsi_period: 14
+  rsi_oversold: 35
+  rsi_overbought: 65
+  bb_period: 20
+  bb_std: 2.0
+
+  breakout_lookback: 20
+  breakout_strength: 0.2
+  volume_threshold: 1.2
+
+  adx_period: 14
+  trending_threshold: 20
+
+  atr_period: 14
+  stop_loss_atr_multiple: 3.0
+  take_profit_atr_multiple: 3.5
+
+  max_consecutive_losses: 5
+  max_daily_loss_pct: 2.0
+  max_trades_per_day: 3
+
+  allowed_hours: [13, 16, 21]
+  avoid_hours: [14, 17, 19]
+
+  max_bars_in_trade: 60
+  min_bars_between_trades: 5
+
+  use_volatility_filter: true
+  max_atr_for_entry: 5.0
+  min_atr_for_entry: 1.5
+
+  # === SINGLE CHANGE: BB WIDTH FILTER (recalibrated) ===
+  min_bb_width_pct: 0.7
+
+  max_volume_ratio: 0.0
+  min_volume_ratio: 0.0
+  avoid_weekdays: []
+  short_require_strong_signal: false
+  short_min_bb_distance: 0.0
+  use_trailing_stop: false
+  use_adaptive_regime: false
+  track_recent_performance: false
+  use_atr_take_profit: false
+
+data:
+  source: "ib_real_data"
+  timeframe: "5min"
+
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/test_bb_width_07.log"
