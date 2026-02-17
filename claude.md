@@ -74,9 +74,15 @@ Standalone configs that include all sections still work unchanged (base values a
 
 These rules reduce token usage without sacrificing thoroughness. Follow on every session.
 
+### Windows PowerShell (user is on Windows)
+- Replace `| tail -N` with `| Select-Object -Last N`
+- Replace `| grep "pattern"` with `| Select-String "pattern"`
+- Example: `python src/backtest/run_backtest.py ... | Select-Object -Last 15`
+- Example: `python tools/rolling_walk_forward.py ... | Select-String "Test|Window"`
+
 ### Backtest output
-- Always pipe through `| tail -15` for full backtests (only need the results summary)
-- For walk-forward: pipe through `| grep -E "(WF\||Period|Train|Test|Validate)"`
+- Always pipe through `| tail -15` (Linux) or `| Select-Object -Last 15` (Windows) for full backtests
+- For walk-forward: pipe through `| grep -E "(WF\||Period|Train|Test|Validate)"` (Linux) or `| Select-String "Test|Window"` (Windows)
 - When running multiple backtests, use background tasks and read JSON results
 - JSON results path is always in the last line of output: `logs/backtest_*.json`
 
