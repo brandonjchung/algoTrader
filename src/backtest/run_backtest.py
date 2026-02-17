@@ -72,21 +72,21 @@ def print_summary(results: dict, config: dict):
     print(f"Final Equity: ${metrics['final_equity']:,.2f}")
     
     print(f"\nPERFORMANCE")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     print(f"Total Return: {metrics['total_return_pct']:>10.2f}%")
     print(f"Total P&L: ${metrics['total_pnl']:>13,.2f}")
     print(f"Sharpe Ratio: {metrics['sharpe_ratio']:>11.2f}")
     print(f"Max Drawdown: {metrics['max_drawdown_pct']:>10.2f}%")
-    
+
     print(f"\nTRADE STATISTICS")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     print(f"Total Trades: {metrics['total_trades']:>12}")
     print(f"Winning Trades: {metrics['winning_trades']:>10}")
     print(f"Losing Trades: {metrics['losing_trades']:>11}")
     print(f"Win Rate: {metrics['win_rate_pct']:>16.2f}%")
-    
+
     print(f"\nPROFIT METRICS")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     print(f"Gross Profit: ${metrics['gross_profit']:>11,.2f}")
     print(f"Gross Loss: ${metrics['gross_loss']:>13,.2f}")
     print(f"Profit Factor: {metrics['profit_factor']:>11.2f}")
