@@ -235,17 +235,27 @@ python src/ib/ib_integration.py --symbol MES --duration "1 Y" --bar-size "5 mins
 - Results: regime-weighted portfolio = +12.67%, Sharpe 0.81, MaxDD -5.59% on ES data
   vs TF alone: +12.96%, Sharpe 0.59, MaxDD -10.07% (44.5% drawdown reduction)
 
-### Phase 3: Rolling walk-forward (TODO)
-- Implement rolling window optimization: re-optimize on trailing 6 months every month
-- Validate on most recent month (fresh OOS data)
-- Auto-update live config when re-optimized params pass validation
-- Reduce position size when parameters become unstable
+### Phase 3: Rolling walk-forward (DONE)
+- tools/rolling_walk_forward.py: Slides train/test window across entire dataset
+- Tests every 3-month period, not just the first year
+- TF wide breakout: 7/18 windows profitable (39%), avg +0.65% per window
+  Strong in trending periods (late 2021-early 2022), weak in ranging (2023)
+  Confirms regime dependency -- expected for trend following
+- MR on ES data: 0 signals (calibrated for MES price levels, needs real MES data)
 
-### Phase 4: Risk management layer (TODO)
-- Position sizing: half-Kelly based on recent win rate and avg win/loss
-- Portfolio-level drawdown breaker: if combined portfolio hits -X%, reduce all exposure
-- Correlation monitor: alert if strategies start losing simultaneously
-- Per-strategy confidence score based on rolling OOS performance
+### Phase 4: Risk management layer (DONE)
+- src/risk/position_sizer.py: Standalone module with 4 functions:
+  - half_kelly_size(): Position size from recent win rate and payoff ratio
+  - drawdown_scaler(): Reduce position on drawdown (100%/50%/25%/0% at 0/5/10/15% DD)
+  - confidence_score(): Rolling 0-100 score based on WR, PF, trend, consistency
+  - portfolio_risk_check(): Cross-strategy correlation, concentration, simultaneous losses
+- Ready to integrate into backtester when portfolio goes live
+
+### Phase 5: Next steps (TODO)
+- Test everything on real MES data (current ES data miscalibrates MR strategy)
+- Integrate position_sizer into backtester for dynamic sizing during backtest
+- Build auto-rebalancer: monthly rolling WF -> update config if params pass validation
+- Forward test on paper account before live deployment
 
 ---
 
