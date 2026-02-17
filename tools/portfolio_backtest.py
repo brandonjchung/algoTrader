@@ -99,9 +99,9 @@ def load_equity_curve(equity_path):
         return None
     df = pd.read_csv(equity_path, index_col=0, parse_dates=True)
     # Ensure timezone-naive datetime index for compatibility with regime data
-    if df.index.tz is not None:
-        df.index = df.index.tz_localize(None)
     df.index = pd.to_datetime(df.index)
+    if hasattr(df.index, 'tz') and df.index.tz is not None:
+        df.index = df.index.tz_localize(None)
     if 'equity' in df.columns:
         return df['equity']
     return df.iloc[:, 0]
@@ -341,9 +341,9 @@ def main():
     if args.regime:
         data_path = os.path.join('data/historical', args.data_file)
         data = pd.read_csv(data_path, index_col=0, parse_dates=True)
-        if data.index.tz is not None:
-            data.index = data.index.tz_localize(None)
         data.index = pd.to_datetime(data.index)
+        if hasattr(data.index, 'tz') and data.index.tz is not None:
+            data.index = data.index.tz_localize(None)
         regimes = classify_regime(data, REGIME_CONFIG)
         regime_counts = regimes['regime'].value_counts()
 
