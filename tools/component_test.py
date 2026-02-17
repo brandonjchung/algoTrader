@@ -96,35 +96,35 @@ def run_walk_forward(config_file, data_file):
                             encoding='utf-8', errors='replace')
     output = result.stdout + result.stderr
 
-    # Parse per-period results
+    # Parse per-period results from machine-readable WF_SUMMARY lines
+    # Format: WF|period|return|sharpe|trades|win_rate|pf
     periods = {}
-    for period in ['train', 'test', 'validate']:
-        # Match format: "Train    7.64%   0.38    24   50.0%    2.92"
-        # Uses flexible whitespace matching for padded output
-        pattern = rf'{period.capitalize()}\s+([-\d.]+)%\s+([-\d.]+)\s+(\d+)\s+([-\d.]+)%\s+([-\d.]+)'
-        match = re.search(pattern, output, re.IGNORECASE)
-        if match:
-            periods[period] = {
-                'return': float(match.group(1)),
-                'sharpe': float(match.group(2)),
-                'trades': int(match.group(3)),
-                'win_rate': float(match.group(4)),
-                'pf': float(match.group(5)),
-            }
+    for line in output.splitlines():
+        line = line.strip()
+        if line.startswith('WF|'):
+            parts = line.split('|')
+            if len(parts) == 7:
+                period = parts[1]
+                periods[period] = {
+                    'return': float(parts[2]),
+                    'sharpe': float(parts[3]),
+                    'trades': int(parts[4]),
+                    'win_rate': float(parts[5]),
+                    'pf': float(parts[6]),
+                }
 
-    # If regex failed, try parsing from the per-test stdout lines
+    # Fallback: try regex on the summary table output
     if not periods:
         for period in ['train', 'test', 'validate']:
-            # Match "✅ 24 trades, 7.64% return, 50.0% win rate" after period header
-            pat = rf'{period.upper()}.*?(\d+) trades,\s*([-\d.]+)% return,\s*([-\d.]+)% win rate'
-            match = re.search(pat, output, re.DOTALL | re.IGNORECASE)
+            pattern = rf'{period.capitalize()}\s+([-\d.]+)%\s+([-\d.]+)\s+(\d+)\s+([-\d.]+)%\s+([-\d.]+)'
+            match = re.search(pattern, output, re.IGNORECASE)
             if match:
                 periods[period] = {
-                    'return': float(match.group(2)),
-                    'sharpe': 0,
-                    'trades': int(match.group(1)),
-                    'win_rate': float(match.group(3)),
-                    'pf': 0,
+                    'return': float(match.group(1)),
+                    'sharpe': float(match.group(2)),
+                    'trades': int(match.group(3)),
+                    'win_rate': float(match.group(4)),
+                    'pf': float(match.group(5)),
                 }
 
     return periods
