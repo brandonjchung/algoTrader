@@ -26,15 +26,41 @@ from backtest.backtester import Backtester
 
 
 def load_config(config_path: str) -> dict:
-    """Load configuration from YAML file."""
+    """Load configuration from YAML file.
+
+    Supports optional base config inheritance. If config/base.yaml exists,
+    it is loaded first and the strategy config is merged on top (strategy
+    values override base values). Standalone configs without a base still
+    work unchanged.
+    """
     if not os.path.exists(config_path):
         print(f"ERROR: Config file not found: {config_path}")
         return None
-    
+
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
-    
+
+    # Check for base config (optional - backwards compatible)
+    base_path = os.path.join('config', 'base.yaml')
+    if os.path.exists(base_path):
+        with open(base_path, 'r') as f:
+            base = yaml.safe_load(f)
+        # Deep merge: base provides defaults, strategy config overrides
+        merged = _deep_merge(base, config)
+        return merged
+
     return config
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge override dict into base dict. Override wins on conflicts."""
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 def load_data(filename: str) -> pd.DataFrame:

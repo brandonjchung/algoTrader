@@ -64,6 +64,45 @@ algoTrader/
 - **One-off analysis scripts** should be deleted after findings are captured
 - **Root directory** should only have: claude.md, README, requirements.txt, .env, docker-compose
 
+### Base config inheritance
+`config/base.yaml` contains shared trading/contract/costs/risk/data/backtest settings.
+Strategy configs in production/development/ inherit from base automatically via deep merge.
+Strategy configs only need to define the `strategy:` section (and any overrides).
+Standalone configs that include all sections still work unchanged (base values are overridden).
+
+## Session Efficiency Guidelines
+
+These rules reduce token usage without sacrificing thoroughness. Follow on every session.
+
+### Backtest output
+- Always pipe through `| tail -15` for full backtests (only need the results summary)
+- For walk-forward: pipe through `| grep -E "(WF\||Period|Train|Test|Validate)"`
+- When running multiple backtests, use background tasks and read JSON results
+- JSON results path is always in the last line of output: `logs/backtest_*.json`
+
+### File operations
+- Use offset/limit on Read for files already partially known (don't re-read 400-line files)
+- On session continuations, skip full codebase exploration -- the structure is documented here
+- When creating test configs that inherit from base.yaml, only write the strategy section + overrides
+
+### Config creation
+- New strategy configs should be ~20 lines (strategy section only), not 80+ lines
+- Example minimal config:
+```yaml
+strategy:
+  name: "trend_following"
+  breakout_period: 40
+  # ... strategy-specific params only
+logging:
+  log_file: "logs/tf_wide_breakout.log"
+```
+
+### What NOT to cut
+- Always read strategy code before modifying it (no blind edits)
+- Always run walk-forward on any config being considered for ADOPT
+- Always check yearly performance distribution on full backtests (regime dependency)
+- Never skip the calibration step when setting new filter thresholds
+
 ## Strategy Development History
 
 ### V1 Baseline (config/strategies/adaptive_market.yaml)
@@ -167,6 +206,12 @@ python tools/component_test.py <data-file>
 # Walk-forward test (single strategy)
 python tools/walk_forward_test.py config/strategies/production/mean_rev_quiet_filter.yaml <data-file>
 
+# Portfolio backtest (combine MR + TF with fixed weights)
+python tools/portfolio_backtest.py <data-file>
+
+# Portfolio backtest (regime-aware dynamic allocation)
+python tools/portfolio_backtest.py <data-file> --regime
+
 # Calibrate filter thresholds for new data period
 python tools/calibrate_filters.py <data-file>
 
@@ -176,6 +221,31 @@ python tools/regime_analysis.py logs/trades_<timestamp>.csv <data-file>
 # Download IB data
 python src/ib/ib_integration.py --symbol MES --duration "1 Y" --bar-size "5 mins"
 ```
+
+## Long-Term Strategy Development Roadmap
+
+### Phase 1: Strategy diversification (DONE)
+- Mean reversion (production - V2) + Trend following (development - 40-bar breakout)
+- These are naturally complementary: MR works in ranging/low-vol, TF in trending/high-vol
+
+### Phase 2: Portfolio infrastructure (DONE)
+- Portfolio backtester combining multiple strategy equity curves
+- Regime classifier (ATR percentile + ADX level -> 4 regimes)
+- Dynamic allocation weights per regime
+- Results: regime-weighted portfolio = +12.67%, Sharpe 0.81, MaxDD -5.59% on ES data
+  vs TF alone: +12.96%, Sharpe 0.59, MaxDD -10.07% (44.5% drawdown reduction)
+
+### Phase 3: Rolling walk-forward (TODO)
+- Implement rolling window optimization: re-optimize on trailing 6 months every month
+- Validate on most recent month (fresh OOS data)
+- Auto-update live config when re-optimized params pass validation
+- Reduce position size when parameters become unstable
+
+### Phase 4: Risk management layer (TODO)
+- Position sizing: half-Kelly based on recent win rate and avg win/loss
+- Portfolio-level drawdown breaker: if combined portfolio hits -X%, reduce all exposure
+- Correlation monitor: alert if strategies start losing simultaneously
+- Per-strategy confidence score based on rolling OOS performance
 
 ---
 
