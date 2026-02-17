@@ -33,8 +33,8 @@ STRATEGIES = {
         'weight': 0.5,
     },
     'trend_follow': {
-        'config': 'config/strategies/development/tf_test_wide_breakout.yaml',
-        'label': 'Trend Following (40-bar)',
+        'config': 'config/strategies/development/tf_mes_strict.yaml',
+        'label': 'Trend Following (MES Strict)',
         'weight': 0.5,
     },
 }
