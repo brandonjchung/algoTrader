@@ -336,6 +336,23 @@ class WalkForwardTester:
                 print(f"WF|{period}|{r['total_return_pct']:.2f}|{r['sharpe_ratio']:.2f}|{r['total_trades']}|{r['win_rate']:.1f}|{r['profit_factor']:.2f}")
         print(f"WF_SUMMARY_END")
 
+        # Also write to JSON file for reliable cross-process communication
+        wf_output_file = os.environ.get('WF_OUTPUT_FILE')
+        if wf_output_file:
+            wf_json = {}
+            for period in ['train', 'test', 'validate']:
+                if period in results:
+                    r = results[period]
+                    wf_json[period] = {
+                        'return': r['total_return_pct'],
+                        'sharpe': r['sharpe_ratio'],
+                        'trades': r['total_trades'],
+                        'win_rate': r['win_rate'],
+                        'pf': r['profit_factor'],
+                    }
+            with open(wf_output_file, 'w') as f:
+                json.dump(wf_json, f)
+
         # Analysis
         print(f"\n{'='*60}")
         print("ANALYSIS")

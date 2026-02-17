@@ -85,20 +85,60 @@ def run_backtest(config_file, data_file):
 
 
 def run_walk_forward(config_file, data_file):
-    """Run walk-forward test and return parsed metrics per period."""
+    """Run walk-forward test and return parsed metrics per period.
+
+    Uses a temp JSON file for reliable cross-process communication,
+    with stdout pipe-delimited parsing as fallback.
+    """
+    import json
+    import tempfile
+
+    # Create temp file for walk-forward to write results to
+    wf_output = tempfile.NamedTemporaryFile(mode='w', suffix='.json',
+                                             delete=False, dir='logs')
+    wf_output_path = wf_output.name
+    wf_output.close()
+
     cmd = [
         'python', 'tools/walk_forward_test.py',
         config_file,
         data_file
     ]
 
+    # Pass output file path via environment variable
+    env = os.environ.copy()
+    env['WF_OUTPUT_FILE'] = wf_output_path
+
     result = subprocess.run(cmd, capture_output=True, text=True,
-                            encoding='utf-8', errors='replace')
+                            encoding='utf-8', errors='replace', env=env)
     output = result.stdout + result.stderr
 
-    # Parse per-period results from machine-readable WF_SUMMARY lines
-    # Format: WF|period|return|sharpe|trades|win_rate|pf
+    # Method 1: Read from JSON file (most reliable)
     periods = {}
+    try:
+        with open(wf_output_path, 'r') as f:
+            wf_json = json.load(f)
+        for period, data in wf_json.items():
+            periods[period] = {
+                'return': float(data['return']),
+                'sharpe': float(data['sharpe']),
+                'trades': int(data['trades']),
+                'win_rate': float(data['win_rate']),
+                'pf': float(data['pf']),
+            }
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        pass
+    finally:
+        # Clean up temp file
+        try:
+            os.unlink(wf_output_path)
+        except OSError:
+            pass
+
+    if periods:
+        return periods
+
+    # Method 2: Parse pipe-delimited WF| lines from stdout
     for line in output.splitlines():
         line = line.strip()
         if line.startswith('WF|'):
@@ -113,19 +153,21 @@ def run_walk_forward(config_file, data_file):
                     'pf': float(parts[6]),
                 }
 
-    # Fallback: try regex on the summary table output
-    if not periods:
-        for period in ['train', 'test', 'validate']:
-            pattern = rf'{period.capitalize()}\s+([-\d.]+)%\s+([-\d.]+)\s+(\d+)\s+([-\d.]+)%\s+([-\d.]+)'
-            match = re.search(pattern, output, re.IGNORECASE)
-            if match:
-                periods[period] = {
-                    'return': float(match.group(1)),
-                    'sharpe': float(match.group(2)),
-                    'trades': int(match.group(3)),
-                    'win_rate': float(match.group(4)),
-                    'pf': float(match.group(5)),
-                }
+    if periods:
+        return periods
+
+    # Method 3: Regex on summary table
+    for period in ['train', 'test', 'validate']:
+        pattern = rf'{period.capitalize()}\s+([-\d.]+)%\s+([-\d.]+)\s+(\d+)\s+([-\d.]+)%\s+([-\d.]+)'
+        match = re.search(pattern, output, re.IGNORECASE)
+        if match:
+            periods[period] = {
+                'return': float(match.group(1)),
+                'sharpe': float(match.group(2)),
+                'trades': int(match.group(3)),
+                'win_rate': float(match.group(4)),
+                'pf': float(match.group(5)),
+            }
 
     return periods
 
