@@ -33,8 +33,8 @@ STRATEGIES = {
         'weight': 0.5,
     },
     'trend_follow': {
-        'config': 'config/strategies/development/tf_mes_strict.yaml',
-        'label': 'Trend Following (MES Strict)',
+        'config': 'config/strategies/development/tf_cal_combined.yaml',
+        'label': 'Trend Following (V2)',
         'weight': 0.5,
     },
 }

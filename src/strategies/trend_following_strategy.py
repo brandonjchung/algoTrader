@@ -67,6 +67,10 @@ class TrendFollowingStrategy(BaseStrategy):
         self.take_profit_atr_multiple = config.get('take_profit_atr_multiple', 4.0)
         self.use_trailing_stop = config.get('use_trailing_stop', True)
         self.trailing_stop_atr = config.get('trailing_stop_atr', 2.0)
+        # Breakeven stop: once price moves breakeven_trigger_atr in your favor,
+        # move hard stop to entry price (eliminates losers that bleed slowly).
+        # Set breakeven_trigger_atr: 0 to disable.
+        self.breakeven_trigger_atr = config.get('breakeven_trigger_atr', 0.0)
 
         # Time filters - trend moves happen at MORE active periods
         # (different from MR which uses quieter hours)
@@ -385,6 +389,15 @@ class TrendFollowingStrategy(BaseStrategy):
                 if trail < entry_price and current_high >= trail:
                     del self.trade_low_water_mark[trade_id]
                     return trail, 'trailing_stop'
+
+        # Breakeven stop: once price moves breakeven_trigger_atr in our favor,
+        # promote the hard stop to entry price so we can't lose on this trade.
+        if self.breakeven_trigger_atr > 0 and current_atr > 0:
+            trigger = self.breakeven_trigger_atr * current_atr
+            if is_long and current_high >= entry_price + trigger:
+                stop_loss = max(stop_loss, entry_price)
+            elif not is_long and current_low <= entry_price - trigger:
+                stop_loss = min(stop_loss, entry_price)
 
         # Hard stop loss
         if is_long and current_low <= stop_loss:
