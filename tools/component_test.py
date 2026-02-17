@@ -19,27 +19,23 @@ import os
 
 
 # Define test variants
-# Each test changes ONE variable from the baseline (v1_atr_filter)
+# Round 5: Validate V2 (low_volume) as new baseline vs V1.
+# Test whether no_friday adds value on top of V2.
 TESTS = {
-    'baseline': {
+    'v1_baseline': {
         'config': 'config/strategies/v1_atr_filter.yaml',
-        'description': 'V1 + ATR filter (current best)',
-        'change': 'None (baseline)',
+        'description': 'V1 + ATR filter (original baseline)',
+        'change': 'None (v1 reference)',
     },
-    'low_volume': {
-        'config': 'config/strategies/test_low_volume_filter.yaml',
-        'description': 'V1+ATR only on low volume (<0.9x avg)',
+    'v2_low_volume': {
+        'config': 'config/strategies/v2_low_volume.yaml',
+        'description': 'V2 = V1+ATR + low_volume (candidate new best)',
         'change': 'max_volume_ratio: 0.9 (low-volume entries only)',
     },
-    'bb_width_07': {
-        'config': 'config/strategies/test_bb_width_07.yaml',
-        'description': 'V1+ATR with BB width >= 0.7% (recalibrated)',
-        'change': 'min_bb_width_pct: 0.7 (was 1.2 - miscalibrated)',
-    },
-    'no_friday': {
-        'config': 'config/strategies/test_no_friday.yaml',
-        'description': 'V1+ATR without Friday trades',
-        'change': 'Exclude Friday (pre-weekend position squaring)',
+    'v2_no_friday': {
+        'config': 'config/strategies/test_v2_no_friday.yaml',
+        'description': 'V2 + no_friday combination',
+        'change': 'V2 + avoid_weekdays: [4]',
     },
 }
 
