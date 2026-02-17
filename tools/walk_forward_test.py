@@ -328,6 +328,14 @@ class WalkForwardTester:
                   f"{r['win_rate']:>6.1f}%     "
                   f"{r['profit_factor']:>6.2f}")
 
+        # Machine-readable summary for component_test.py parsing
+        print(f"\nWF_SUMMARY_START")
+        for period in ['train', 'test', 'validate']:
+            if period in results:
+                r = results[period]
+                print(f"WF|{period}|{r['total_return_pct']:.2f}|{r['sharpe_ratio']:.2f}|{r['total_trades']}|{r['win_rate']:.1f}|{r['profit_factor']:.2f}")
+        print(f"WF_SUMMARY_END")
+
         # Analysis
         print(f"\n{'='*60}")
         print("ANALYSIS")
