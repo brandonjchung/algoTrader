@@ -53,19 +53,79 @@ algoTrader/
 - **One-off analysis scripts** should be deleted after findings are captured
 - **Root directory** should only have: claude.md, README, requirements.txt, .env, docker-compose
 
-### Common commands (run from project root):
-```bash
-# Backtest
-python src/backtest/run_backtest.py --config config/strategies/adaptive_market.yaml --data-file <file>
+## Strategy Development History
 
-# Walk-forward test
-python tools/walk_forward_test.py config/strategies/adaptive_market.yaml <data-file>
+### V1 Baseline (config/strategies/adaptive_market.yaml)
+- **Return:** +6.28%, 149 trades, 48.8% WR, PF 1.21
+- **Walk-forward:** Train +4.22%, Test -4.90%, Validate +3.16%
+- **Problem:** Test period failed badly; regime analysis found ATR increased 73.9% after peak
+
+### V1 + ATR Filter (config/strategies/v1_atr_filter.yaml) — FIRST ADOPT
+- **Change:** Added volatility filter: max_atr_for_entry: 5.0, min_atr_for_entry: 1.5
+- **Evidence:** "Very High" ATR quintile lost -$873 (all net losses). Mean reversion fails in high volatility.
+- **Result:** +10.31%, 86 trades, 48.8% WR, PF 1.61, MaxDD -3.70%
+- **Walk-forward:** Train +7.64%, Test +0.36%, Validate +0.86% (all positive)
+
+### Component Tests Run (10 single-change tests against V1+ATR baseline)
+```
+Round 1: RSI/time filter tests
+  no_time_filter:  REJECT (validate -5.46% - clear overfitting signal)
+  rsi_30_70:       REJECT (-2.23% vs baseline, worse OOS)
+  rsi_40_60:       REJECT (-1.94% vs baseline, worse OOS)
+
+Round 2: Stop/TP/weekday tests
+  no_monday:       NEUTRAL (marginal across all metrics)
+  stop_2atr:       NEUTRAL (test worse, validate better - inconsistent)
+  tp_2atr:         REJECT (risk:reward math broken: 2 ATR TP / 3 ATR stop = unfavorable)
+
+Round 3: Signal quality tests (first pass)
+  volume_filter:   REJECT (high volume = momentum, not reversion - hypothesis was backwards)
+  bb_width_1.2%:   REJECT (threshold miscalibrated - nearly no trades generated)
+  no_friday:       NEUTRAL (consistently slight improvement, below 1% threshold)
+
+Round 4: Signal quality tests (corrected)
+  low_volume:      BORDERLINE ADOPT - see V2 below
+  bb_width_0.7%:   REJECT (still only 16 trades, $148 avg win but insufficient sample)
+  no_friday (r4):  NEUTRAL (consistent improvement, all periods positive)
+```
+
+### V2 (config/strategies/v2_low_volume.yaml) — CURRENT BEST CONFIG
+- **Change:** Added max_volume_ratio: 0.9 (only trade low-volume BB extremes)
+- **Rationale:** Allowed hours (13, 16, 21) have median volume ratio of 0.331x. High-volume bars
+  at these hours = momentum/news events that DON'T revert. Low-volume = pure noise that snaps back.
+  Calibration showed 74% of eligible-hour bars qualify (below 0.9x average).
+- **Full backtest:** +10.54%, 50 trades, **56.0% WR**, **PF 2.29**, MaxDD **-1.59%**, Sharpe 0.26
+- **Walk-forward:** Train +5.46% (PF 2.78), Test +3.52% (PF 2.18), Validate +0.10% (PF 1.10)
+- **Targets met:** Return ✓, MaxDD ✓, WR ✓ (56% > 52% target), PF ✓ (2.29 > 1.5 target)
+- **Note:** Validate period only 11 trades - small sample. Test period (20 trades) is stronger signal.
+- **Candidate extension:** v2 + no_friday → 41T, 58.5% WR, PF 2.51, MaxDD -1.16%
+  (validate improves to +0.31% but only 9 trades - not yet adopted)
+
+### Key Learnings from Testing
+1. **Only structural insights produce ADOPTs** - ATR filter (regime-based) worked; RSI/stop tweaks didn't
+2. **High volume = momentum at quiet hours** - test confirmed opposite of naive hypothesis
+3. **Validate period is noisy with <20 trades** - weight the test period (45 trades) more heavily
+4. **Never change multiple parameters at once** - V2 original (5 changes) lost -9.01%
+5. **No Monday/Friday matter little** - weekday effects below statistical significance
+6. **tp_2atr confirmed**: Never set TP < SL without much higher win rate. 2 ATR TP / 3 ATR stop = requires 60%+ WR to break even.
+
+---
+
+
+# Backtest (current best config = V2)
+python src/backtest/run_backtest.py --config config/strategies/v2_low_volume.yaml --data-file <file>
+
+# Component test (runs all variants + walk-forward comparison)
+python tools/component_test.py <data-file>
+
+# Walk-forward test (single strategy)
+python tools/walk_forward_test.py config/strategies/v2_low_volume.yaml <data-file>
+
+# Calibrate filter thresholds for new data period
+python tools/calibrate_filters.py <data-file>
 
 # Regime analysis
 python tools/regime_analysis.py logs/trades_<timestamp>.csv <data-file>
-
-# Compare strategies
-python tools/compare_strategies.py
 
 # Download IB data
 python src/ib/ib_integration.py --symbol MES --duration "1 Y" --bar-size "5 mins"
