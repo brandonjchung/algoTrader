@@ -45,6 +45,7 @@ class EMACrossoverStrategy(BaseStrategy):
 
         # EMA parameters
         self.ema_period = config.get('ema_period', 9)
+        self.ema_slow_period = config.get('ema_slow_period', 0)  # 0 = off (use price cross); >0 = dual EMA mode
 
         # Crossover confirmation
         self.min_cross_distance_pct = config.get('min_cross_distance_pct', 0.02)  # % beyond EMA to confirm
@@ -111,15 +112,25 @@ class EMACrossoverStrategy(BaseStrategy):
 
         print("Calculating EMA CROSSOVER indicators...")
 
-        # EMA 9 (the signal line)
+        # EMA fast (the signal line)
         df['ema'] = df['close'].ewm(span=self.ema_period, adjust=False).mean()
 
-        # Previous bar's close relative to EMA (for detecting crossover)
+        # Dual EMA mode: slow EMA as the baseline instead of price
+        if self.ema_slow_period > 0:
+            df['ema_slow'] = df['close'].ewm(span=self.ema_slow_period, adjust=False).mean()
+            df['prev_ema_fast'] = df['ema'].shift(1)
+            df['prev_ema_slow'] = df['ema_slow'].shift(1)
+            df['ema_distance_pct'] = ((df['ema'] - df['ema_slow']) / df['ema_slow']) * 100
+        else:
+            df['ema_slow'] = np.nan
+
+        # Previous bar's close relative to EMA (for detecting price crossover)
         df['prev_close'] = df['close'].shift(1)
         df['prev_ema'] = df['ema'].shift(1)
 
-        # Distance from EMA as percentage
-        df['ema_distance_pct'] = ((df['close'] - df['ema']) / df['ema']) * 100
+        # Distance from EMA as percentage (price vs EMA mode)
+        if self.ema_slow_period == 0:
+            df['ema_distance_pct'] = ((df['close'] - df['ema']) / df['ema']) * 100
 
         # ATR for volatility measurement and stop sizing
         high_low = df['high'] - df['low']
@@ -136,7 +147,10 @@ class EMACrossoverStrategy(BaseStrategy):
         if self.use_adx_filter:
             df['adx'] = self.calculate_adx(df, self.adx_period)
 
-        print(f"  EMA period: {self.ema_period}")
+        if self.ema_slow_period > 0:
+            print(f"  Dual EMA mode: fast={self.ema_period}, slow={self.ema_slow_period}")
+        else:
+            print(f"  Price crossover mode: EMA {self.ema_period}")
         print(f"  Min cross distance: {self.min_cross_distance_pct}%")
         print(f"  ATR period: {self.atr_period}")
         print(f"  Time filter: {self.allowed_hours}")
@@ -228,31 +242,63 @@ class EMACrossoverStrategy(BaseStrategy):
                     signals['skipped_volume'] += 1
                     continue
 
-            # Detect crossover
-            ema_distance_pct = abs((close - ema) / ema) * 100
+            # Detect crossover - two modes
             min_dist = self.min_cross_distance_pct
 
-            # LONG: Bullish crossover (close crosses above EMA)
-            if (prev_close <= prev_ema and close > ema and
-                    ema_distance_pct >= min_dist):
+            if self.ema_slow_period > 0:
+                # DUAL EMA MODE: fast EMA crosses slow EMA
+                ema_fast = ema
+                ema_slow = bar.get('ema_slow', np.nan)
+                prev_fast = bar.get('prev_ema_fast', np.nan)
+                prev_slow = bar.get('prev_ema_slow', np.nan)
 
-                df.at[df.index[i], 'signal'] = 1
-                df.at[df.index[i], 'entry_price'] = close
-                df.at[df.index[i], 'stop_loss'] = close - (atr * self.stop_loss_atr_multiple)
-                df.at[df.index[i], 'take_profit'] = close + (atr * self.take_profit_atr_multiple)
-                signals['long_cross'] += 1
-                self.trades_today += 1
+                if pd.isna(ema_slow) or pd.isna(prev_slow) or pd.isna(prev_fast):
+                    continue
 
-            # SHORT: Bearish crossover (close crosses below EMA)
-            elif (prev_close >= prev_ema and close < ema and
-                  ema_distance_pct >= min_dist):
+                ema_distance_pct = abs((ema_fast - ema_slow) / ema_slow) * 100
 
-                df.at[df.index[i], 'signal'] = -1
-                df.at[df.index[i], 'entry_price'] = close
-                df.at[df.index[i], 'stop_loss'] = close + (atr * self.stop_loss_atr_multiple)
-                df.at[df.index[i], 'take_profit'] = close - (atr * self.take_profit_atr_multiple)
-                signals['short_cross'] += 1
-                self.trades_today += 1
+                # LONG: fast EMA crosses above slow EMA
+                if (prev_fast <= prev_slow and ema_fast > ema_slow and
+                        ema_distance_pct >= min_dist):
+                    df.at[df.index[i], 'signal'] = 1
+                    df.at[df.index[i], 'entry_price'] = close
+                    df.at[df.index[i], 'stop_loss'] = close - (atr * self.stop_loss_atr_multiple)
+                    df.at[df.index[i], 'take_profit'] = close + (atr * self.take_profit_atr_multiple)
+                    signals['long_cross'] += 1
+                    self.trades_today += 1
+
+                # SHORT: fast EMA crosses below slow EMA
+                elif (prev_fast >= prev_slow and ema_fast < ema_slow and
+                      ema_distance_pct >= min_dist):
+                    df.at[df.index[i], 'signal'] = -1
+                    df.at[df.index[i], 'entry_price'] = close
+                    df.at[df.index[i], 'stop_loss'] = close + (atr * self.stop_loss_atr_multiple)
+                    df.at[df.index[i], 'take_profit'] = close - (atr * self.take_profit_atr_multiple)
+                    signals['short_cross'] += 1
+                    self.trades_today += 1
+            else:
+                # PRICE CROSSOVER MODE: close crosses EMA
+                ema_distance_pct = abs((close - ema) / ema) * 100
+
+                # LONG: Bullish crossover (close crosses above EMA)
+                if (prev_close <= prev_ema and close > ema and
+                        ema_distance_pct >= min_dist):
+                    df.at[df.index[i], 'signal'] = 1
+                    df.at[df.index[i], 'entry_price'] = close
+                    df.at[df.index[i], 'stop_loss'] = close - (atr * self.stop_loss_atr_multiple)
+                    df.at[df.index[i], 'take_profit'] = close + (atr * self.take_profit_atr_multiple)
+                    signals['long_cross'] += 1
+                    self.trades_today += 1
+
+                # SHORT: Bearish crossover (close crosses below EMA)
+                elif (prev_close >= prev_ema and close < ema and
+                      ema_distance_pct >= min_dist):
+                    df.at[df.index[i], 'signal'] = -1
+                    df.at[df.index[i], 'entry_price'] = close
+                    df.at[df.index[i], 'stop_loss'] = close + (atr * self.stop_loss_atr_multiple)
+                    df.at[df.index[i], 'take_profit'] = close - (atr * self.take_profit_atr_multiple)
+                    signals['short_cross'] += 1
+                    self.trades_today += 1
 
         total = signals['long_cross'] + signals['short_cross']
         print(f"\n  Total signals: {total}")
