@@ -84,8 +84,9 @@ class AdaptiveMarketStrategy(BaseStrategy):
         self.take_profit_atr_multiple = config.get('take_profit_atr_multiple', 3.5)
 
         # Signal quality filters (entry confirmation)
-        self.min_volume_ratio = config.get('min_volume_ratio', 0.0)   # 0 = off; 1.2 = above-avg volume only
-        self.min_bb_width_pct = config.get('min_bb_width_pct', 0.0)   # 0 = off; percent of price (e.g. 1.5)
+        self.min_volume_ratio = config.get('min_volume_ratio', 0.0)   # 0 = off; >1.2 = above-avg volume only
+        self.max_volume_ratio = config.get('max_volume_ratio', 0.0)   # 0 = off; <0.8 = low-volume only
+        self.min_bb_width_pct = config.get('min_bb_width_pct', 0.0)   # 0 = off; percent of price (e.g. 0.7)
 
         # V3 - Adaptive regime detection
         self.use_adaptive_regime = config.get('use_adaptive_regime', False)
@@ -273,9 +274,13 @@ class AdaptiveMarketStrategy(BaseStrategy):
             # (ADX calculation was returning NaN, blocking all trades)
 
             # Signal quality filters
-            if self.min_volume_ratio > 0:
+            if self.min_volume_ratio > 0 or self.max_volume_ratio > 0:
                 vol_ratio = current_bar.get('volume_ratio', 0)
-                if pd.isna(vol_ratio) or vol_ratio < self.min_volume_ratio:
+                if pd.isna(vol_ratio):
+                    continue
+                if self.min_volume_ratio > 0 and vol_ratio < self.min_volume_ratio:
+                    continue
+                if self.max_volume_ratio > 0 and vol_ratio > self.max_volume_ratio:
                     continue
 
             if self.min_bb_width_pct > 0:
