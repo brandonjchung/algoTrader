@@ -330,26 +330,47 @@ def main():
         else:
             print(f"    Full backtest: {ret_diff:+.2f}% vs baseline (SIMILAR)")
 
-        # Walk-forward comparison
+        # Walk-forward comparison - check both test AND validate
         base_test = wf_results.get('baseline', {}).get('test', {})
+        base_val = wf_results.get('baseline', {}).get('validate', {})
         var_test = wf.get('test', {})
+        var_val = wf.get('validate', {})
 
         if base_test and var_test:
             test_diff = var_test['return'] - base_test['return']
             if test_diff > 0.5:
-                print(f"    Out-of-sample (test): +{test_diff:.2f}% (IMPROVES on unseen data)")
+                print(f"    Out-of-sample (test):     +{test_diff:.2f}% (BETTER)")
             elif test_diff < -0.5:
-                print(f"    Out-of-sample (test): {test_diff:.2f}% (WORSE on unseen data)")
+                print(f"    Out-of-sample (test):     {test_diff:.2f}% (WORSE)")
             else:
-                print(f"    Out-of-sample (test): {test_diff:+.2f}% (SIMILAR on unseen data)")
+                print(f"    Out-of-sample (test):     {test_diff:+.2f}% (SIMILAR)")
 
-        # Verdict
-        if ret_diff > 1 and var_test and var_test.get('return', 0) > base_test.get('return', 0):
-            print(f"    --> ADOPT: Improves both in-sample and out-of-sample")
-        elif ret_diff > 1 and var_test and var_test.get('return', 0) <= base_test.get('return', 0):
-            print(f"    --> REJECT: Improves in-sample but NOT out-of-sample (overfitting)")
+        if base_val and var_val:
+            val_diff = var_val['return'] - base_val['return']
+            if val_diff > 0.5:
+                print(f"    Out-of-sample (validate): +{val_diff:.2f}% (BETTER)")
+            elif val_diff < -0.5:
+                print(f"    Out-of-sample (validate): {val_diff:.2f}% (WORSE)")
+            else:
+                print(f"    Out-of-sample (validate): {val_diff:+.2f}% (SIMILAR)")
+
+        # Verdict: requires improvement in BOTH out-of-sample periods
+        # (not just test - that prevents false positives from lucky test splits)
+        val_ok = var_val.get('return', -999) > base_val.get('return', 0) if (var_val and base_val) else None
+        test_ok = var_test.get('return', -999) > base_test.get('return', 0) if (var_test and base_test) else None
+        dd_ok = metrics['max_drawdown_pct'] > baseline_full['max_drawdown_pct'] - 3  # allow 3% more drawdown
+
+        if ret_diff > 1 and test_ok and val_ok and dd_ok:
+            print(f"    --> ADOPT: Improves full backtest AND both out-of-sample periods")
+        elif ret_diff > 1 and (not test_ok or not val_ok):
+            if not val_ok:
+                print(f"    --> REJECT: In-sample gain doesn't hold in validate period (overfitting)")
+            else:
+                print(f"    --> REJECT: In-sample gain doesn't hold out-of-sample (overfitting)")
+        elif ret_diff > 1 and not dd_ok:
+            print(f"    --> REJECT: Return improvement offset by excessive drawdown increase")
         elif ret_diff < -1:
-            print(f"    --> REJECT: Worse performance")
+            print(f"    --> REJECT: Worse full-backtest performance")
         else:
             print(f"    --> NEUTRAL: No significant difference")
 
