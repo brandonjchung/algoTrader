@@ -93,6 +93,8 @@ def run_walk_forward(config_file, data_file):
     import json
     import tempfile
 
+    os.makedirs('logs', exist_ok=True)
+
     # Create temp file for walk-forward to write results to
     wf_output = tempfile.NamedTemporaryFile(mode='w', suffix='.json',
                                              delete=False, dir='logs')
@@ -111,25 +113,38 @@ def run_walk_forward(config_file, data_file):
 
     result = subprocess.run(cmd, capture_output=True, text=True,
                             encoding='utf-8', errors='replace', env=env)
-    output = result.stdout + result.stderr
+
+    stdout = result.stdout or ''
+    stderr = result.stderr or ''
+    output = stdout + stderr
 
     # Method 1: Read from JSON file (most reliable)
     periods = {}
+    json_err = None
     try:
         with open(wf_output_path, 'r') as f:
-            wf_json = json.load(f)
-        for period, data in wf_json.items():
-            periods[period] = {
-                'return': float(data['return']),
-                'sharpe': float(data['sharpe']),
-                'trades': int(data['trades']),
-                'win_rate': float(data['win_rate']),
-                'pf': float(data['pf']),
-            }
-    except (FileNotFoundError, json.JSONDecodeError, KeyError):
-        pass
+            content = f.read()
+        if content.strip():
+            wf_json = json.loads(content)
+            for period, data in wf_json.items():
+                periods[period] = {
+                    'return': float(data['return']),
+                    'sharpe': float(data['sharpe']),
+                    'trades': int(data['trades']),
+                    'win_rate': float(data['win_rate']),
+                    'pf': float(data['pf']),
+                }
+        else:
+            json_err = "JSON file was empty"
+    except FileNotFoundError:
+        json_err = "JSON file not found"
+    except json.JSONDecodeError as e:
+        json_err = f"JSON decode error: {e}"
+    except KeyError as e:
+        json_err = f"Missing key: {e}"
+    except Exception as e:
+        json_err = f"Error: {e}"
     finally:
-        # Clean up temp file
         try:
             os.unlink(wf_output_path)
         except OSError:
@@ -168,6 +183,21 @@ def run_walk_forward(config_file, data_file):
                 'win_rate': float(match.group(4)),
                 'pf': float(match.group(5)),
             }
+
+    # If all methods failed, print diagnostic info
+    if not periods:
+        print(f"\n    [DEBUG] WF parse failed for {os.path.basename(config_file)}")
+        print(f"    [DEBUG] Return code: {result.returncode}")
+        print(f"    [DEBUG] JSON method: {json_err}")
+        # Show last 15 lines of output for clues
+        lines = output.strip().splitlines()
+        tail = lines[-15:] if len(lines) > 15 else lines
+        if tail:
+            print(f"    [DEBUG] Last {len(tail)} lines of output:")
+            for l in tail:
+                print(f"      {l}")
+        else:
+            print(f"    [DEBUG] No output captured from subprocess")
 
     return periods
 
