@@ -1,0 +1,95 @@
+# STRATEGY: EMA 9 Crossover - Filtered (MES/ES 5-min)
+# ====================================================
+# DEVELOPMENT - V1 with calibrated filters
+#
+# Raw EMA crossover produced 5192 signals, 36.8% WR, PF 0.82 -> total loss.
+# Problem: ~21% of all bars produce crossovers = pure noise.
+#
+# Filters applied based on data calibration:
+#   1. min_cross_distance: 0.10% (median EMA distance = 0.13%)
+#      Only take crosses with real momentum behind them
+#   2. min_volume_ratio: 1.2 (75th percentile)
+#      Require above-average volume = real conviction on the move
+#   3. ADX > 20 (trending confirmation)
+#      Don't trade EMA crosses in ranging/choppy markets
+#
+# STATUS: DEVELOPMENT - testing calibrated filters
+
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 2.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 60
+  avoid_last_minutes: 15
+  no_overnight: true
+
+strategy:
+  name: "ema_crossover"
+
+  # EMA parameters
+  ema_period: 9
+
+  # Crossover confirmation - require real momentum
+  min_cross_distance_pct: 0.10
+
+  # Volume filter - require conviction
+  min_volume_ratio: 1.2
+  volume_ma_period: 20
+
+  # ATR filter - avoid extremes
+  atr_period: 14
+  min_atr_for_entry: 8.0     # 10th percentile on ES data
+  max_atr_for_entry: 24.0    # 95th percentile on ES data
+
+  # ADX filter - require trending
+  use_adx_filter: true
+  adx_period: 14
+  adx_min_threshold: 20
+
+  # Risk management
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 3.0
+
+  # Time filters
+  allowed_hours: [9, 10, 11, 12, 13, 14, 15]
+  avoid_hours: []
+
+  # Trade management
+  max_trades_per_day: 3
+  max_consecutive_losses: 5
+  max_bars_in_trade: 36
+
+data:
+  source: "historical"
+  timeframe: "5min"
+
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/ema_crossover_v1_filtered.log"

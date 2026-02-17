@@ -12,16 +12,25 @@ algoTrader/
 ├── docker-compose.yml         # Monitoring stack
 │
 ├── config/                    # All configuration files
-│   ├── strategies/            # Strategy configs (ONE per strategy variant)
-│   │   ├── adaptive_market.yaml       # V1 baseline
-│   │   ├── v1_atr_filter.yaml         # V1 + ATR filter (current test)
-│   │   ├── adaptive_market_v2.yaml    # V2 (failed - too restrictive)
-│   │   ├── adaptive_market_v3.yaml    # V3 (reverted)
-│   │   └── ...                        # Other strategies
+│   ├── strategies/
+│   │   ├── production/        # Validated strategies ready for forward testing
+│   │   │   ├── mean_rev_quiet_filter.yaml   # V2 (current best)
+│   │   │   └── mean_rev_atr_filter.yaml     # V1 reference
+│   │   ├── development/       # Strategies being built/tested
+│   │   │   ├── trend_following_v1.yaml      # Breakout complement to MR
+│   │   │   ├── ema_crossover_v1.yaml        # Raw EMA 9 baseline
+│   │   │   ├── ema_crossover_v1_filtered.yaml
+│   │   │   ├── ema_crossover_v2_strong.yaml # Best EMA variant (PF 0.99)
+│   │   │   └── ema_crossover_v3_balanced.yaml
+│   │   └── archive/           # Tested/superseded configs
+│   │       └── ...            # 22 archived configs from rounds 1-5
 │   └── grafana_dashboard.json         # Grafana config
 │
 ├── src/                       # Source code
 │   ├── strategies/            # Strategy implementations
+│   │   ├── adaptive_market_strategy.py  # Mean reversion (production)
+│   │   ├── trend_following_strategy.py  # Breakout/trend (development)
+│   │   ├── ema_crossover_strategy.py    # EMA 9 crossover (development)
 │   ├── backtest/              # Backtesting engine
 │   ├── ib/                    # Interactive Brokers integration
 │   ├── analysis/              # Market analysis tools
@@ -31,6 +40,8 @@ algoTrader/
 │
 ├── tools/                     # Analysis & testing tools
 │   ├── walk_forward_test.py   # Walk-forward validation framework
+│   ├── component_test.py      # Single-variable component testing
+│   ├── calibrate_filters.py   # Measure indicator distributions on real data
 │   ├── regime_analysis.py     # Market regime analysis
 │   ├── compare_strategies.py  # Side-by-side strategy comparison
 │   └── debug/                 # Debug utilities
@@ -111,15 +122,50 @@ Round 4: Signal quality tests (corrected)
 
 ---
 
+### Trend Following Strategy (development/trend_following_v1.yaml)
+- **Design:** Breakout of N-bar high/low, ADX > 20, high volume, elevated ATR
+- **Complement:** Active when mean reversion isn't (ATR > 3.0, high volume, trending)
+- **Full backtest (ES data):** +3.38%, 132 trades, 53.8% WR, PF 1.06, MaxDD -16.47%
+- **Walk-forward:** Train -0.23%, Test -1.97%, Validate +0.80%
+- **Status:** NOT VIABLE in current form. Positive full backtest but fails walk-forward.
+  Needs: wider breakout period, better entry timing, or regime filter.
 
+### EMA 9 Crossover Strategy (development/ema_crossover_*.yaml)
+- **Design:** Trade when close crosses above/below EMA 9 on 5-min bars
+- **Key risk:** Whipsaws - EMA crossovers happen on ~21% of all 5-min bars
+
+Variants tested (ES data, 5 years):
+```
+Raw (v1):          5192 signals, 36.8% WR, PF 0.82, -93.6%  -> total loss
+Filtered (v1_f):   1411 signals, 33.1% WR, PF 0.69, -96.0%  -> worse with basic filters
+Strong (v2):        182 signals, 28.7% WR, PF 0.99,  -1.4%  -> near breakeven, peaked +37%
+Balanced (v3):      248 signals, 32.7% WR, PF 0.98,  -3.5%  -> similar breakeven
+```
+
+Best variant (v2_strong) walk-forward:
+  Train +9.11% (PF 1.53), Test +3.33% (PF 1.69), Validate -0.03% (PF 1.01)
+
+**Status:** NOT PRODUCTION READY. Converges to PF ~1.0 regardless of filter tuning.
+  The raw EMA 9 crossover on 5-min doesn't have structural edge on this data.
+  Possible improvements to explore:
+  - Dual EMA crossover (9/21) for fewer but stronger signals
+  - EMA slope filter (only trade when EMA itself is trending)
+  - Combine with market regime filter (only trade in trending regimes)
+  - Different timeframe (15-min or 1-hour may reduce noise)
+
+---
+
+## Common Commands
+
+```bash
 # Backtest (current best config = V2)
-python src/backtest/run_backtest.py --config config/strategies/v2_low_volume.yaml --data-file <file>
+python src/backtest/run_backtest.py --config config/strategies/production/mean_rev_quiet_filter.yaml --data-file <file>
 
 # Component test (runs all variants + walk-forward comparison)
 python tools/component_test.py <data-file>
 
 # Walk-forward test (single strategy)
-python tools/walk_forward_test.py config/strategies/v2_low_volume.yaml <data-file>
+python tools/walk_forward_test.py config/strategies/production/mean_rev_quiet_filter.yaml <data-file>
 
 # Calibrate filter thresholds for new data period
 python tools/calibrate_filters.py <data-file>
@@ -420,5 +466,5 @@ If we can't prove it's better than random, we don't trade it.
 
 ---
 
-*Last updated: 2026-02-16*
+*Last updated: 2026-02-17*
 *Next review: After every major strategy revision*

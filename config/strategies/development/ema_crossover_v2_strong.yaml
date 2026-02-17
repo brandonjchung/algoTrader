@@ -1,0 +1,91 @@
+# STRATEGY: EMA 9 Crossover - Strong Crosses Only (MES/ES 5-min)
+# ===============================================================
+# DEVELOPMENT - V2: Only take very strong crossovers
+#
+# V1 raw: 5192 signals, 36.8% WR, PF 0.82 -> total loss
+# V1 filtered: 1411 signals, 33.1% WR, PF 0.69 -> worse
+#
+# New approach: Require much stronger cross (0.25% = 75th percentile)
+# Plus volume + ADX + tighter stop (1.5 ATR) with 4x target
+# Hypothesis: Strong crosses with high momentum have better follow-through
+#
+# STATUS: DEVELOPMENT - testing strong cross filter
+
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 2.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 60
+  avoid_last_minutes: 15
+  no_overnight: true
+
+strategy:
+  name: "ema_crossover"
+
+  # EMA parameters
+  ema_period: 9
+
+  # Only strong crosses - 75th percentile distance
+  min_cross_distance_pct: 0.25
+
+  # Volume filter - require strong conviction
+  min_volume_ratio: 1.3
+  volume_ma_period: 20
+
+  # ATR filter
+  atr_period: 14
+  min_atr_for_entry: 10.0    # above 25th percentile
+  max_atr_for_entry: 24.0
+
+  # ADX filter - require trending
+  use_adx_filter: true
+  adx_period: 14
+  adx_min_threshold: 25      # stronger trend requirement
+
+  # Risk management - tighter stop, bigger target
+  stop_loss_atr_multiple: 1.5
+  take_profit_atr_multiple: 4.0
+
+  # Time filters
+  allowed_hours: [9, 10, 11, 12, 13, 14, 15]
+  avoid_hours: []
+
+  # Trade management
+  max_trades_per_day: 2
+  max_consecutive_losses: 5
+  max_bars_in_trade: 48      # 4 hours to let trend develop
+
+data:
+  source: "historical"
+  timeframe: "5min"
+
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/ema_crossover_v2_strong.log"

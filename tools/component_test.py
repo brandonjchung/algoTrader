@@ -19,23 +19,14 @@ import os
 
 
 # Define test variants
-# Round 5: Validate V2 (low_volume) as new baseline vs V1.
-# Test whether no_friday adds value on top of V2.
+# Updated paths after directory restructure.
+# Production configs in config/strategies/production/
+# Archive configs in config/strategies/archive/
 TESTS = {
-    'v1_baseline': {
-        'config': 'config/strategies/v1_atr_filter.yaml',
-        'description': 'V1 + ATR filter (original baseline)',
-        'change': 'None (v1 reference)',
-    },
-    'v2_low_volume': {
-        'config': 'config/strategies/v2_low_volume.yaml',
-        'description': 'V2 = V1+ATR + low_volume (candidate new best)',
-        'change': 'max_volume_ratio: 0.9 (low-volume entries only)',
-    },
-    'v2_no_friday': {
-        'config': 'config/strategies/test_v2_no_friday.yaml',
-        'description': 'V2 + no_friday combination',
-        'change': 'V2 + avoid_weekdays: [4]',
+    'v2_baseline': {
+        'config': 'config/strategies/production/mean_rev_quiet_filter.yaml',
+        'description': 'V2 production baseline (ATR + low volume filter)',
+        'change': 'None (current production baseline)',
     },
 }
 
