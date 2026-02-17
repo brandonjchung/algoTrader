@@ -73,6 +73,23 @@ class AdaptiveMarketStrategy(BaseStrategy):
         self.trailing_stop_activation_atr = config.get('trailing_stop_activation_atr', 2.0)
         self.trailing_stop_distance_atr = config.get('trailing_stop_distance_atr', 2.5)
 
+        # V3 - Volatility filtering (don't trade in too choppy or too dead markets)
+        self.use_volatility_filter = config.get('use_volatility_filter', False)
+        self.max_atr_for_entry = config.get('max_atr_for_entry', 8.0)
+        self.min_atr_for_entry = config.get('min_atr_for_entry', 2.0)
+
+        # V3 - Adaptive regime detection
+        self.use_adaptive_regime = config.get('use_adaptive_regime', False)
+        self.regime_lookback = config.get('regime_lookback', 100)
+        self.trending_threshold = config.get('trending_threshold', 25)
+        self.ranging_threshold = config.get('ranging_threshold', 20)
+
+        # V3 - Recent performance tracking
+        self.track_recent_performance = config.get('track_recent_performance', False)
+        self.recent_trades_window = config.get('recent_trades_window', 10)
+        self.pause_if_win_rate_below = config.get('pause_if_win_rate_below', 0.30)
+        self.recent_trades = []  # Track recent trade results (1 = win, 0 = loss)
+
         # State tracking
         self.consecutive_losses = 0
         self.circuit_breaker_active = False
@@ -227,6 +244,17 @@ class AdaptiveMarketStrategy(BaseStrategy):
             # Skip if missing data (removed ADX check - causing all NaN)
             if pd.isna(rsi) or pd.isna(atr):
                 continue
+
+            # V3: Volatility filter (don't trade if too choppy or too dead)
+            if self.use_volatility_filter:
+                if atr > self.max_atr_for_entry or atr < self.min_atr_for_entry:
+                    continue
+
+            # V3: Recent performance check (pause if recent win rate too low)
+            if self.track_recent_performance and len(self.recent_trades) >= self.recent_trades_window:
+                recent_win_rate = sum(self.recent_trades[-self.recent_trades_window:]) / self.recent_trades_window
+                if recent_win_rate < self.pause_if_win_rate_below:
+                    continue  # Pause trading until performance improves
 
             # Market is 73.8% ranging - just use mean reversion all the time
             # (ADX calculation was returning NaN, blocking all trades)
