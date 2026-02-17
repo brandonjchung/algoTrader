@@ -26,20 +26,20 @@ TESTS = {
         'description': 'V1 + ATR filter (current best)',
         'change': 'None (baseline)',
     },
-    'no_monday': {
-        'config': 'config/strategies/test_no_monday.yaml',
-        'description': 'V1+ATR without Monday trades',
-        'change': 'Exclude Monday (gap risk, thin liquidity)',
+    'volume_filter': {
+        'config': 'config/strategies/test_volume_filter.yaml',
+        'description': 'V1+ATR with volume confirmation',
+        'change': 'Require volume_ratio >= 1.2 at entry',
     },
-    'stop_2atr': {
-        'config': 'config/strategies/test_stop_2atr.yaml',
-        'description': 'V1+ATR with tighter stop (2.0 ATR)',
-        'change': 'Stop loss 3.0 ATR -> 2.0 ATR (tighter)',
+    'bb_width_filter': {
+        'config': 'config/strategies/test_bb_width_filter.yaml',
+        'description': 'V1+ATR with BB width filter',
+        'change': 'Require BB width >= 1.2% of price at entry',
     },
-    'tp_2atr': {
-        'config': 'config/strategies/test_tp_atr.yaml',
-        'description': 'V1+ATR with fixed ATR take-profit',
-        'change': 'Take profit: BB middle -> 2.0 ATR fixed target',
+    'no_friday': {
+        'config': 'config/strategies/test_no_friday.yaml',
+        'description': 'V1+ATR without Friday trades',
+        'change': 'Exclude Friday (pre-weekend position squaring)',
     },
 }
 

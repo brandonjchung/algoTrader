@@ -83,6 +83,10 @@ class AdaptiveMarketStrategy(BaseStrategy):
         self.use_atr_take_profit = config.get('use_atr_take_profit', False)
         self.take_profit_atr_multiple = config.get('take_profit_atr_multiple', 3.5)
 
+        # Signal quality filters (entry confirmation)
+        self.min_volume_ratio = config.get('min_volume_ratio', 0.0)   # 0 = off; 1.2 = above-avg volume only
+        self.min_bb_width_pct = config.get('min_bb_width_pct', 0.0)   # 0 = off; percent of price (e.g. 1.5)
+
         # V3 - Adaptive regime detection
         self.use_adaptive_regime = config.get('use_adaptive_regime', False)
         self.regime_lookback = config.get('regime_lookback', 100)
@@ -267,6 +271,17 @@ class AdaptiveMarketStrategy(BaseStrategy):
 
             # Market is 73.8% ranging - just use mean reversion all the time
             # (ADX calculation was returning NaN, blocking all trades)
+
+            # Signal quality filters
+            if self.min_volume_ratio > 0:
+                vol_ratio = current_bar.get('volume_ratio', 0)
+                if pd.isna(vol_ratio) or vol_ratio < self.min_volume_ratio:
+                    continue
+
+            if self.min_bb_width_pct > 0:
+                bb_width_pct = current_bar.get('bb_width', 0) * 100
+                if pd.isna(bb_width_pct) or bb_width_pct < self.min_bb_width_pct:
+                    continue
 
             # Determine take-profit level: fixed ATR multiple or dynamic BB middle
             if self.use_atr_take_profit:
