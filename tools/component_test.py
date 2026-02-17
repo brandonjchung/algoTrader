@@ -304,10 +304,12 @@ def main():
     print("COMPONENT ANALYSIS")
     print("=" * 80)
 
-    baseline_full = full_results.get('baseline', {})
+    # First key in TESTS is always the baseline
+    baseline_name = next(iter(TESTS))
+    baseline_full = full_results.get(baseline_name, {})
 
     for name, test in TESTS.items():
-        if name == 'baseline':
+        if name == baseline_name:
             continue
 
         metrics = full_results.get(name, {})
@@ -327,8 +329,8 @@ def main():
             print(f"    Full backtest: {ret_diff:+.2f}% vs baseline (SIMILAR)")
 
         # Walk-forward comparison - check both test AND validate
-        base_test = wf_results.get('baseline', {}).get('test', {})
-        base_val = wf_results.get('baseline', {}).get('validate', {})
+        base_test = wf_results.get(baseline_name, {}).get('test', {})
+        base_val = wf_results.get(baseline_name, {}).get('validate', {})
         var_test = wf.get('test', {})
         var_val = wf.get('validate', {})
 
