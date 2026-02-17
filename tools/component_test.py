@@ -99,7 +99,8 @@ def run_walk_forward(config_file, data_file):
     # Parse per-period results
     periods = {}
     for period in ['train', 'test', 'validate']:
-        # Find the line with period results
+        # Match format: "Train    7.64%   0.38    24   50.0%    2.92"
+        # Uses flexible whitespace matching for padded output
         pattern = rf'{period.capitalize()}\s+([-\d.]+)%\s+([-\d.]+)\s+(\d+)\s+([-\d.]+)%\s+([-\d.]+)'
         match = re.search(pattern, output, re.IGNORECASE)
         if match:
@@ -110,6 +111,21 @@ def run_walk_forward(config_file, data_file):
                 'win_rate': float(match.group(4)),
                 'pf': float(match.group(5)),
             }
+
+    # If regex failed, try parsing from the per-test stdout lines
+    if not periods:
+        for period in ['train', 'test', 'validate']:
+            # Match "✅ 24 trades, 7.64% return, 50.0% win rate" after period header
+            pat = rf'{period.upper()}.*?(\d+) trades,\s*([-\d.]+)% return,\s*([-\d.]+)% win rate'
+            match = re.search(pat, output, re.DOTALL | re.IGNORECASE)
+            if match:
+                periods[period] = {
+                    'return': float(match.group(2)),
+                    'sharpe': 0,
+                    'trades': int(match.group(1)),
+                    'win_rate': float(match.group(3)),
+                    'pf': 0,
+                }
 
     return periods
 
@@ -200,15 +216,20 @@ def main():
 
     for period in ['train', 'test', 'validate']:
         print(f"\n  {period.upper()} PERIOD:")
-        print(f"  {'Variant':<18} {'Return':>8} {'Trades':>7} {'WinRate':>8} {'PF':>6} {'Sharpe':>7}")
-        print(f"  {'-' * 55}")
+        print(f"  {'Variant':<18} {'Return':>8} {'Trades':>7} {'WinRate':>8} {'PF':>6}")
+        print(f"  {'-' * 50}")
 
+        has_data = False
         for name in TESTS:
             if period in wf_results.get(name, {}):
                 data = wf_results[name][period]
+                has_data = True
+                pf_str = f"{data['pf']:>6.2f}" if data['pf'] > 0 else "   N/A"
                 print(f"  {name:<18} {data['return']:>7.2f}% {data['trades']:>7} "
-                      f"{data['win_rate']:>7.1f}% {data['pf']:>6.2f} "
-                      f"{data['sharpe']:>7.2f}")
+                      f"{data['win_rate']:>7.1f}% {pf_str}")
+
+        if not has_data:
+            print(f"  (no data parsed for this period)")
 
     # Phase 3: Verdict
     print(f"\n{'=' * 80}")
