@@ -1,5 +1,78 @@
 # AlgoTrader Development Methodology
 
+## Project Structure
+
+```
+algoTrader/
+├── claude.md                  # This file - methodology & rules
+├── README.md                  # Project overview
+├── QUICKSTART.md              # Getting started guide
+├── requirements.txt           # Python dependencies
+├── .env.example               # Environment template
+├── docker-compose.yml         # Monitoring stack
+│
+├── config/                    # All configuration files
+│   ├── strategies/            # Strategy configs (ONE per strategy variant)
+│   │   ├── adaptive_market.yaml       # V1 baseline
+│   │   ├── v1_atr_filter.yaml         # V1 + ATR filter (current test)
+│   │   ├── adaptive_market_v2.yaml    # V2 (failed - too restrictive)
+│   │   ├── adaptive_market_v3.yaml    # V3 (reverted)
+│   │   └── ...                        # Other strategies
+│   └── grafana_dashboard.json         # Grafana config
+│
+├── src/                       # Source code
+│   ├── strategies/            # Strategy implementations
+│   ├── backtest/              # Backtesting engine
+│   ├── ib/                    # Interactive Brokers integration
+│   ├── analysis/              # Market analysis tools
+│   ├── monitoring/            # Monitoring & alerting
+│   ├── risk/                  # Risk management
+│   └── utils/                 # Shared utilities
+│
+├── tools/                     # Analysis & testing tools
+│   ├── walk_forward_test.py   # Walk-forward validation framework
+│   ├── regime_analysis.py     # Market regime analysis
+│   ├── compare_strategies.py  # Side-by-side strategy comparison
+│   └── debug/                 # Debug utilities
+│
+├── docs/                      # Documentation
+│   ├── expert_review.md
+│   ├── ib_setup_guide.md
+│   └── ...
+│
+├── data/                      # Market data
+│   └── historical/            # Historical OHLCV data files
+│
+└── logs/                      # Backtest results & trade logs
+```
+
+### Rules for keeping it organized:
+- **Configs** go in `config/strategies/` - never in root
+- **Tools/scripts** go in `tools/` - never in root
+- **Docs** go in `docs/` - never in root
+- **One-off analysis scripts** should be deleted after findings are captured
+- **Root directory** should only have: claude.md, README, requirements.txt, .env, docker-compose
+
+### Common commands (run from project root):
+```bash
+# Backtest
+python src/backtest/run_backtest.py --config config/strategies/adaptive_market.yaml --data-file <file>
+
+# Walk-forward test
+python tools/walk_forward_test.py config/strategies/adaptive_market.yaml <data-file>
+
+# Regime analysis
+python tools/regime_analysis.py logs/trades_<timestamp>.csv <data-file>
+
+# Compare strategies
+python tools/compare_strategies.py
+
+# Download IB data
+python src/ib/ib_integration.py --symbol MES --duration "1 Y" --bar-size "5 mins"
+```
+
+---
+
 ## Core Philosophy: Real Quant, Not Parameter Roulette
 
 This document defines our systematic, statistically-backed approach to strategy development. We prioritize **finding real edge** over **chasing past performance**.
