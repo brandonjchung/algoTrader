@@ -26,20 +26,20 @@ TESTS = {
         'description': 'V1 + ATR filter (current best)',
         'change': 'None (baseline)',
     },
-    'no_time_filter': {
-        'config': 'config/strategies/test_no_time_filter.yaml',
-        'description': 'V1+ATR without time filter',
-        'change': 'Removed hour restrictions (trade all RTH)',
+    'no_monday': {
+        'config': 'config/strategies/test_no_monday.yaml',
+        'description': 'V1+ATR without Monday trades',
+        'change': 'Exclude Monday (gap risk, thin liquidity)',
     },
-    'rsi_30_70': {
-        'config': 'config/strategies/test_rsi_30_70.yaml',
-        'description': 'V1+ATR with RSI 30/70',
-        'change': 'RSI 35/65 -> 30/70 (stricter)',
+    'stop_2atr': {
+        'config': 'config/strategies/test_stop_2atr.yaml',
+        'description': 'V1+ATR with tighter stop (2.0 ATR)',
+        'change': 'Stop loss 3.0 ATR -> 2.0 ATR (tighter)',
     },
-    'rsi_40_60': {
-        'config': 'config/strategies/test_rsi_40_60.yaml',
-        'description': 'V1+ATR with RSI 40/60',
-        'change': 'RSI 35/65 -> 40/60 (looser)',
+    'tp_2atr': {
+        'config': 'config/strategies/test_tp_atr.yaml',
+        'description': 'V1+ATR with fixed ATR take-profit',
+        'change': 'Take profit: BB middle -> 2.0 ATR fixed target',
     },
 }
 

@@ -53,6 +53,7 @@ class AdaptiveMarketStrategy(BaseStrategy):
         # Time filters (CRITICAL - trade only profitable hours)
         self.allowed_hours = config.get('allowed_hours', [13, 16, 21])  # Best hours only
         self.avoid_hours = config.get('avoid_hours', [14, 17, 19])  # Worst hours
+        self.avoid_weekdays = config.get('avoid_weekdays', [])  # e.g. [0] = no Mondays
 
         # Breakout parameters (for trending markets)
         self.breakout_lookback = config.get('breakout_lookback', 20)
@@ -77,6 +78,10 @@ class AdaptiveMarketStrategy(BaseStrategy):
         self.use_volatility_filter = config.get('use_volatility_filter', False)
         self.max_atr_for_entry = config.get('max_atr_for_entry', 8.0)
         self.min_atr_for_entry = config.get('min_atr_for_entry', 2.0)
+
+        # Fixed ATR take-profit (alternative to dynamic BB-middle target)
+        self.use_atr_take_profit = config.get('use_atr_take_profit', False)
+        self.take_profit_atr_multiple = config.get('take_profit_atr_multiple', 3.5)
 
         # V3 - Adaptive regime detection
         self.use_adaptive_regime = config.get('use_adaptive_regime', False)
@@ -214,7 +219,7 @@ class AdaptiveMarketStrategy(BaseStrategy):
             if self.consecutive_losses >= self.max_consecutive_losses:
                 if not self.circuit_breaker_active:
                     self.circuit_breaker_active = True
-                    print(f"\n🚨 CIRCUIT BREAKER ACTIVATED at {current_bar.name}")
+                    print(f"\n[ALERT] CIRCUIT BREAKER ACTIVATED at {current_bar.name}")
                 continue
 
             # Daily loss limit
@@ -231,6 +236,10 @@ class AdaptiveMarketStrategy(BaseStrategy):
                 continue
 
             if current_hour not in self.allowed_hours:
+                continue
+
+            # WEEKDAY FILTER
+            if self.avoid_weekdays and current_bar.name.weekday() in self.avoid_weekdays:
                 continue
 
             # Get indicator values
@@ -259,6 +268,14 @@ class AdaptiveMarketStrategy(BaseStrategy):
             # Market is 73.8% ranging - just use mean reversion all the time
             # (ADX calculation was returning NaN, blocking all trades)
 
+            # Determine take-profit level: fixed ATR multiple or dynamic BB middle
+            if self.use_atr_take_profit:
+                long_tp = close + (atr * self.take_profit_atr_multiple)
+                short_tp = close - (atr * self.take_profit_atr_multiple)
+            else:
+                long_tp = bb_middle   # mean reversion target
+                short_tp = bb_middle  # mean reversion target
+
             # LONG Signal: Oversold + at lower BB
             if (rsi < self.rsi_oversold and
                 close < bb_lower):
@@ -266,7 +283,7 @@ class AdaptiveMarketStrategy(BaseStrategy):
                 df.at[df.index[i], 'signal'] = 1  # LONG
                 df.at[df.index[i], 'entry_price'] = close
                 df.at[df.index[i], 'stop_loss'] = close - (atr * self.stop_loss_atr_multiple)
-                df.at[df.index[i], 'take_profit'] = bb_middle  # Target mean reversion to middle
+                df.at[df.index[i], 'take_profit'] = long_tp
                 signals_generated['ranging_long'] += 1
                 self.trades_today += 1
 
@@ -284,7 +301,7 @@ class AdaptiveMarketStrategy(BaseStrategy):
                 df.at[df.index[i], 'signal'] = -1  # SHORT
                 df.at[df.index[i], 'entry_price'] = close
                 df.at[df.index[i], 'stop_loss'] = close + (atr * self.stop_loss_atr_multiple)
-                df.at[df.index[i], 'take_profit'] = bb_middle  # Target mean reversion to middle
+                df.at[df.index[i], 'take_profit'] = short_tp
                 signals_generated['ranging_short'] += 1
                 self.trades_today += 1
 
@@ -402,4 +419,4 @@ class AdaptiveMarketStrategy(BaseStrategy):
             self.consecutive_losses = 0
             if self.circuit_breaker_active:
                 self.circuit_breaker_active = False
-                print(f"\n✅ Circuit breaker RESET after winning trade")
+                print(f"\n[OK] Circuit breaker RESET after winning trade")
