@@ -53,6 +53,15 @@ class TrendFollowingStrategy(BaseStrategy):
         self.min_atr_for_entry = config.get('min_atr_for_entry', 3.0)  # only when market is moving
         self.max_atr_for_entry = config.get('max_atr_for_entry', 12.0) # exclude extreme spikes
 
+        # Momentum close confirmation: require close in top/bottom X% of bar range
+        self.require_momentum_close = config.get('require_momentum_close', False)
+        self.momentum_close_pct = config.get('momentum_close_pct', 0.75)  # top 25% for long, bottom 25% for short
+
+        # Pullback entry mode: don't enter on breakout bar, wait for pullback
+        self.use_pullback_entry = config.get('use_pullback_entry', False)
+        self.pullback_lookback = config.get('pullback_lookback', 6)   # bars to wait for pullback after breakout
+        self.pullback_pct = config.get('pullback_pct', 0.3)          # must retrace 30% of breakout move
+
         # Risk management
         self.stop_loss_atr_multiple = config.get('stop_loss_atr_multiple', 2.0)
         self.take_profit_atr_multiple = config.get('take_profit_atr_multiple', 4.0)
@@ -77,6 +86,9 @@ class TrendFollowingStrategy(BaseStrategy):
         self.last_trade_date = None
         self.trade_high_water_mark = {}
         self.trade_low_water_mark = {}
+
+        # Pullback state: track recent breakouts waiting for pullback entry
+        self.pending_breakouts = []  # list of {direction, breakout_price, breakout_level, atr, bar_idx}
 
     def calculate_adx(self, df: pd.DataFrame, period: int = 14) -> pd.Series:
         """Calculate ADX for trend strength measurement."""
@@ -154,8 +166,10 @@ class TrendFollowingStrategy(BaseStrategy):
         df['take_profit'] = np.nan
 
         signals = {'long_breakout': 0, 'short_breakout': 0,
+                   'pullback_long': 0, 'pullback_short': 0,
                    'skipped_adx': 0, 'skipped_volume': 0,
-                   'skipped_atr': 0, 'skipped_time': 0}
+                   'skipped_atr': 0, 'skipped_time': 0,
+                   'skipped_momentum_close': 0}
 
         for i in range(max(self.breakout_period + self.adx_period, 50), len(df)):
             bar = df.iloc[i]
@@ -188,6 +202,8 @@ class TrendFollowingStrategy(BaseStrategy):
 
             # Get values
             close = bar['close']
+            high = bar['high']
+            low = bar['low']
             atr = bar['atr']
             adx = bar['adx']
             volume_ratio = bar['volume_ratio']
@@ -217,10 +233,78 @@ class TrendFollowingStrategy(BaseStrategy):
 
             # Entry buffer (small ATR fraction to avoid false breakouts)
             buffer = atr * self.breakout_atr_buffer
+            bar_range = high - low
+
+            # --- PULLBACK ENTRY MODE ---
+            if self.use_pullback_entry:
+                # Check for new breakouts to track (don't enter yet)
+                if (close > breakout_high + buffer and plus_di > minus_di):
+                    self.pending_breakouts.append({
+                        'direction': 1,
+                        'breakout_price': close,
+                        'breakout_level': breakout_high,
+                        'atr': atr,
+                        'bar_idx': i,
+                    })
+                elif (close < breakout_low - buffer and minus_di > plus_di):
+                    self.pending_breakouts.append({
+                        'direction': -1,
+                        'breakout_price': close,
+                        'breakout_level': breakout_low,
+                        'atr': atr,
+                        'bar_idx': i,
+                    })
+
+                # Check pending breakouts for pullback entries
+                still_pending = []
+                for pb in self.pending_breakouts:
+                    bars_since = i - pb['bar_idx']
+                    if bars_since > self.pullback_lookback:
+                        continue  # expired
+                    if pb['direction'] == 1:  # long breakout
+                        # Pullback: price retraced toward breakout level
+                        retrace = pb['breakout_price'] - low
+                        move = pb['breakout_price'] - pb['breakout_level']
+                        if move > 0 and retrace / move >= self.pullback_pct and close > pb['breakout_level']:
+                            # Pullback happened and price is still above breakout level
+                            df.at[df.index[i], 'signal'] = 1
+                            df.at[df.index[i], 'entry_price'] = close
+                            df.at[df.index[i], 'stop_loss'] = close - (pb['atr'] * self.stop_loss_atr_multiple)
+                            df.at[df.index[i], 'take_profit'] = close + (pb['atr'] * self.take_profit_atr_multiple)
+                            signals['pullback_long'] += 1
+                            self.trades_today += 1
+                            continue  # consumed
+                    else:  # short breakout
+                        retrace = high - pb['breakout_price']
+                        move = pb['breakout_level'] - pb['breakout_price']
+                        if move > 0 and retrace / move >= self.pullback_pct and close < pb['breakout_level']:
+                            df.at[df.index[i], 'signal'] = -1
+                            df.at[df.index[i], 'entry_price'] = close
+                            df.at[df.index[i], 'stop_loss'] = close + (pb['atr'] * self.stop_loss_atr_multiple)
+                            df.at[df.index[i], 'take_profit'] = close - (pb['atr'] * self.take_profit_atr_multiple)
+                            signals['pullback_short'] += 1
+                            self.trades_today += 1
+                            continue  # consumed
+                    still_pending.append(pb)
+                self.pending_breakouts = still_pending
+                continue  # skip direct breakout entry when pullback mode is on
+
+            # --- DIRECT BREAKOUT ENTRY (default) ---
+
+            # Momentum close check: bar must close in top/bottom portion of its range
+            if self.require_momentum_close and bar_range > 0:
+                close_position = (close - low) / bar_range  # 0=closed at low, 1=closed at high
 
             # LONG: Price breaks above N-bar high with bullish momentum
             if (close > breakout_high + buffer and
                     plus_di > minus_di):  # bullish directional momentum
+
+                # Momentum close: require close in top portion of bar
+                if self.require_momentum_close and bar_range > 0:
+                    close_position = (close - low) / bar_range
+                    if close_position < self.momentum_close_pct:
+                        signals['skipped_momentum_close'] += 1
+                        continue  # bar wicked up but closed low = weak breakout
 
                 df.at[df.index[i], 'signal'] = 1
                 df.at[df.index[i], 'entry_price'] = close
@@ -233,6 +317,13 @@ class TrendFollowingStrategy(BaseStrategy):
             elif (close < breakout_low - buffer and
                   minus_di > plus_di):  # bearish directional momentum
 
+                # Momentum close: require close in bottom portion of bar
+                if self.require_momentum_close and bar_range > 0:
+                    close_position = (close - low) / bar_range
+                    if close_position > (1 - self.momentum_close_pct):
+                        signals['skipped_momentum_close'] += 1
+                        continue  # bar wicked down but closed high = weak breakout
+
                 df.at[df.index[i], 'signal'] = -1
                 df.at[df.index[i], 'entry_price'] = close
                 df.at[df.index[i], 'stop_loss'] = close + (atr * self.stop_loss_atr_multiple)
@@ -240,10 +331,16 @@ class TrendFollowingStrategy(BaseStrategy):
                 signals['short_breakout'] += 1
                 self.trades_today += 1
 
-        total = signals['long_breakout'] + signals['short_breakout']
+        total = (signals['long_breakout'] + signals['short_breakout'] +
+                 signals['pullback_long'] + signals['pullback_short'])
         print(f"\n  Total signals: {total}")
         print(f"  Long breakouts:  {signals['long_breakout']}")
         print(f"  Short breakouts: {signals['short_breakout']}")
+        if self.use_pullback_entry:
+            print(f"  Pullback longs:  {signals['pullback_long']}")
+            print(f"  Pullback shorts: {signals['pullback_short']}")
+        if self.require_momentum_close:
+            print(f"  Skipped (close): {signals['skipped_momentum_close']}")
         print(f"  Skipped (ATR):   {signals['skipped_atr']}")
         print(f"  Skipped (ADX):   {signals['skipped_adx']}")
         print(f"  Skipped (vol):   {signals['skipped_volume']}")

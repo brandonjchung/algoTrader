@@ -1,0 +1,71 @@
+# TF Upgrade 1: Wider breakout period (40 bars instead of 20)
+# ============================================================
+# Hypothesis: 20-bar breakouts catch too much noise. 40 bars (3.3 hrs)
+# means only truly significant levels break through.
+# Change: breakout_period: 20 -> 40 (ONLY change from v1)
+
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 2.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 60
+  avoid_last_minutes: 15
+  no_overnight: true
+
+strategy:
+  name: "trend_following"
+
+  # CHANGED: wider breakout period
+  breakout_period: 40
+  breakout_atr_buffer: 0.25
+
+  adx_period: 14
+  adx_min_threshold: 20
+  min_volume_ratio: 1.2
+  atr_period: 14
+  min_atr_for_entry: 3.0
+  max_atr_for_entry: 12.0
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 4.0
+  use_trailing_stop: true
+  trailing_stop_atr: 2.0
+  allowed_hours: [14, 15, 16, 17, 18, 19, 20]
+  avoid_hours: []
+  max_trades_per_day: 2
+  max_consecutive_losses: 4
+  max_bars_in_trade: 48
+
+data:
+  source: "historical"
+  timeframe: "5min"
+
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/tf_test_wide_breakout.log"
