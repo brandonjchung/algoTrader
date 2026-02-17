@@ -168,17 +168,17 @@ class WalkForwardTester:
         with open(result_files[0], 'r') as f:
             results = json.load(f)
 
-        # Extract key metrics
+        # Extract key metrics (results are in flat structure, not nested)
         metrics = {
             'period': period_name,
-            'total_return_pct': results['performance']['total_return_pct'],
-            'sharpe_ratio': results['performance']['sharpe_ratio'],
-            'max_drawdown_pct': results['performance']['max_drawdown_pct'],
-            'total_trades': results['trades']['total_trades'],
-            'win_rate': results['trades']['win_rate'],
-            'profit_factor': results['trades']['profit_factor'],
-            'avg_win': results['trades']['avg_win'],
-            'avg_loss': results['trades']['avg_loss']
+            'total_return_pct': results.get('total_return_pct', 0),
+            'sharpe_ratio': results.get('sharpe_ratio', 0),
+            'max_drawdown_pct': results.get('max_drawdown_pct', 0),
+            'total_trades': results.get('total_trades', 0),
+            'win_rate': results.get('win_rate_pct', 0),
+            'profit_factor': results.get('profit_factor', 0),
+            'avg_win': results.get('avg_win', 0),
+            'avg_loss': results.get('avg_loss', 0)
         }
 
         return metrics
