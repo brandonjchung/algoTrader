@@ -4,6 +4,9 @@ IB Historical Data Downloader
 Downloads 5-minute OHLCV bars for MES (or any symbol) from Interactive Brokers
 TWS/Gateway and saves to data/historical/.
 
+IB does NOT allow endDateTime with ContFuture. Instead we iterate through
+individual quarterly expired contracts (H/M/U/Z) and stitch them together.
+
 Requirements:
     pip install ib_insync
 
@@ -17,7 +20,7 @@ Setup:
 Usage:
     python tools/download_ib_data.py --symbol MES --years 3
     python tools/download_ib_data.py --symbol MES --years 3 --port 4002
-    python tools/download_ib_data.py --symbol ES  --years 3 --multiplier 50
+    python tools/download_ib_data.py --symbol ES  --years 3
 
 Output:
     data/historical/MES_5mins_<start>_to_<end>_REAL.csv
@@ -32,40 +35,106 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 
-def get_contract(ib, symbol, multiplier):
-    from ib_insync import Future, ContFuture
-    # Use continuous future for multi-year history (rolls automatically)
-    contract = ContFuture(symbol=symbol, exchange='CME', currency='USD')
-    contract.includeExpired = True
-    details = ib.reqContractDetails(contract)
-    if not details:
-        print(f"  Warning: no contract details found for {symbol}, trying Future directly")
-        contract = Future(symbol=symbol, exchange='CME', currency='USD')
-    return contract
+# MES/ES quarterly expiry months: H=Mar, M=Jun, U=Sep, Z=Dec
+# Approximate last trading day: 3rd Friday of expiry month
+QUARTER_MONTHS = [3, 6, 9, 12]
 
 
-def download_chunk(ib, contract, end_dt, duration='1 W'):
-    """Download one chunk of 5-min bars ending at end_dt."""
-    from ib_insync import util
-    end_str = end_dt.strftime('%Y%m%d %H:%M:%S') + ' US/Eastern'
-    bars = ib.reqHistoricalData(
-        contract,
-        endDateTime=end_str,
-        durationStr=duration,
-        barSizeSetting='5 mins',
-        whatToShow='TRADES',
-        useRTH=False,           # include extended hours
-        formatDate=1,
-        keepUpToDate=False,
+def get_quarterly_contracts(symbol, years_back):
+    """
+    Return list of (year, month) for quarterly futures going back N years,
+    oldest first. Each tuple represents one front-month period to download.
+    """
+    now = datetime.now()
+    start = now - timedelta(days=int(years_back * 365) + 90)
+
+    contracts = []
+    for year in range(start.year, now.year + 1):
+        for month in QUARTER_MONTHS:
+            dt = datetime(year, month, 1)
+            if start <= dt <= now + timedelta(days=90):
+                contracts.append((year, month))
+
+    return sorted(contracts)
+
+
+def approx_expiry(year, month):
+    """Approximate the 3rd Friday of the expiry month (close enough for endDateTime)."""
+    # Find first Friday of the month
+    first = datetime(year, month, 1)
+    days_to_friday = (4 - first.weekday()) % 7  # 4 = Friday
+    first_friday = first + timedelta(days=days_to_friday)
+    third_friday = first_friday + timedelta(weeks=2)
+    return third_friday
+
+
+def download_contract_history(ib, symbol, year, month, chunk_days=5):
+    """
+    Download all 5-min bars for one quarterly contract.
+    Walks backwards from expiry in weekly chunks.
+    Returns DataFrame or None.
+    """
+    from ib_insync import Future, util
+
+    contract_month = f"{year}{month:02d}"
+    contract = Future(
+        symbol=symbol,
+        exchange='CME',
+        currency='USD',
+        lastTradeDateOrContractMonth=contract_month,
+        includeExpired=True,
     )
-    if not bars:
+
+    # Qualify the contract to get full details
+    try:
+        ib.qualifyContracts(contract)
+    except Exception:
+        pass  # will try anyway
+
+    # Download period: 3 months before expiry (the front-month liquid period)
+    expiry = approx_expiry(year, month)
+    period_start = expiry - timedelta(days=95)  # ~3 months back
+    now = datetime.now()
+    if expiry > now:
+        expiry = now  # don't request future dates
+
+    all_frames = []
+    current_end = expiry
+
+    while current_end > period_start:
+        end_str = current_end.strftime('%Y%m%d %H:%M:%S') + ' US/Eastern'
+        try:
+            bars = ib.reqHistoricalData(
+                contract,
+                endDateTime=end_str,
+                durationStr=f'{chunk_days} D',
+                barSizeSetting='5 mins',
+                whatToShow='TRADES',
+                useRTH=False,
+                formatDate=1,
+                keepUpToDate=False,
+            )
+        except Exception as e:
+            print(f"\n    chunk error: {e}")
+            bars = []
+
+        if bars:
+            df = util.df(bars)
+            df = df.rename(columns={'date': 'timestamp'})
+            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            all_frames.append(df)
+
+        current_end -= timedelta(days=chunk_days)
+        time.sleep(0.4)  # respect IB pacing limit
+
+    if not all_frames:
         return None
-    df = util.df(bars)
-    df = df.rename(columns={'date': 'timestamp', 'open': 'open', 'high': 'high',
-                             'low': 'low', 'close': 'close', 'volume': 'volume'})
-    df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    return df
+
+    combined = pd.concat(all_frames, ignore_index=True)
+    combined = combined.drop_duplicates(subset=['timestamp'])
+    combined = combined.sort_values('timestamp').reset_index(drop=True)
+    return combined
 
 
 def main():
@@ -79,8 +148,6 @@ def main():
                              '4002=Gateway paper, 4001=Gateway live)')
     parser.add_argument('--client-id', type=int, default=10,
                         help='IB API client ID (default: 10)')
-    parser.add_argument('--multiplier', default='5',
-                        help='Contract multiplier (default: 5 for MES, 50 for ES)')
     args = parser.parse_args()
 
     try:
@@ -101,58 +168,53 @@ def main():
         print("  2. Enable API: File -> Global Configuration -> API -> Settings")
         print("     -> Check 'Enable ActiveX and Socket Clients'")
         print(f"  3. Confirm port {args.port} matches your TWS/Gateway setting")
-        print("  4. For TWS paper trading use --port 7497")
-        print("  5. For IB Gateway paper trading use --port 4002")
+        print("  4. TWS paper trading: --port 7497")
+        print("  5. IB Gateway paper: --port 4002")
         sys.exit(1)
 
-    print(f"Connected. Downloading {args.years} years of {args.symbol} 5-min bars...")
+    print(f"Connected. Building {args.years}-year history from quarterly contracts...\n")
 
-    contract = get_contract(ib, args.symbol, args.multiplier)
-
-    end_dt = datetime.now()
-    start_dt = end_dt - timedelta(days=int(args.years * 365))
-    total_days = (end_dt - start_dt).days
-    chunk_days = 5  # IB allows max 1 week per request for 5-min bars
+    quarterly = get_quarterly_contracts(args.symbol, args.years)
+    print(f"Contracts to download: {len(quarterly)}")
+    for y, m in quarterly:
+        month_name = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m]
+        print(f"  {args.symbol} {month_name} {y}  ({y}{m:02d})")
+    print()
 
     all_frames = []
-    current_end = end_dt
-    chunks_done = 0
-    total_chunks = (total_days // chunk_days) + 1
+    for i, (year, month) in enumerate(quarterly, 1):
+        month_name = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month]
+        print(f"[{i}/{len(quarterly)}] Downloading {args.symbol} {month_name} {year}...", end=' ', flush=True)
 
-    print(f"Downloading {start_dt.date()} to {end_dt.date()} in {total_chunks} weekly chunks...\n")
-
-    while current_end > start_dt:
-        chunks_done += 1
-        pct = int((chunks_done / total_chunks) * 100)
-        print(f"  [{pct:3d}%] Chunk {chunks_done}/{total_chunks}: ending {current_end.strftime('%Y-%m-%d')}", end='\r')
-
-        try:
-            df = download_chunk(ib, contract, current_end, duration='1 W')
-        except Exception as e:
-            print(f"\n  Warning: chunk failed ({e}), skipping...")
-            current_end -= timedelta(days=chunk_days)
-            time.sleep(2)
-            continue
+        df = download_contract_history(ib, args.symbol, year, month)
 
         if df is not None and len(df) > 0:
             all_frames.append(df)
+            print(f"{len(df):,} bars")
+        else:
+            print("no data (contract may be expired/unavailable)")
 
-        current_end -= timedelta(days=chunk_days)
-        time.sleep(0.5)  # respect IB rate limits (max ~50 requests/10s)
+        time.sleep(1)  # pause between contracts
 
     ib.disconnect()
-    print(f"\n\nDownload complete. Assembling {len(all_frames)} chunks...")
 
     if not all_frames:
-        print("ERROR: No data downloaded.")
+        print("\nERROR: No data downloaded.")
         sys.exit(1)
 
+    print(f"\nAssembling {len(all_frames)} contracts...")
     combined = pd.concat(all_frames, ignore_index=True)
     combined = combined.drop_duplicates(subset=['timestamp'])
     combined = combined.sort_values('timestamp').reset_index(drop=True)
-    combined['timestamp'] = combined['timestamp'].dt.tz_localize(None)
+
+    # Strip timezone if present
+    if hasattr(combined['timestamp'].dt, 'tz') and combined['timestamp'].dt.tz is not None:
+        combined['timestamp'] = combined['timestamp'].dt.tz_localize(None)
 
     # Trim to requested range
+    start_dt = datetime.now() - timedelta(days=int(args.years * 365))
     combined = combined[combined['timestamp'] >= pd.Timestamp(start_dt)]
 
     actual_start = combined['timestamp'].min().strftime('%Y-%m-%d')
@@ -161,13 +223,13 @@ def main():
     os.makedirs('data/historical', exist_ok=True)
     filename = f"{args.symbol}_5mins_{actual_start}_to_{actual_end}_REAL.csv"
     out_path = os.path.join('data/historical', filename)
-
     combined.set_index('timestamp').to_csv(out_path)
 
-    print(f"\nSaved {len(combined):,} bars to {out_path}")
-    print(f"  Date range : {actual_start} to {actual_end}")
+    print(f"\nSaved {len(combined):,} bars -> {out_path}")
+    print(f"  Range      : {actual_start} to {actual_end}")
     print(f"  Bars/day   : {len(combined) / (args.years * 252):.0f} avg")
-    print(f"\nRun your backtest with:")
+    print(f"\nNext steps:")
+    print(f"  python tools/calibrate_filters.py {filename}")
     print(f"  python src/backtest/run_backtest.py --config <config> --data-file {filename}")
 
 
