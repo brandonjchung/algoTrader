@@ -148,13 +148,6 @@ def download_contract_history(ib, symbol, year, month, multiplier, chunk_days=5)
             if consecutive_empty >= 2:
                 break  # no data for this contract, move on
 
-        if bars:
-            df = util.df(bars)
-            df = df.rename(columns={'date': 'timestamp'})
-            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            all_frames.append(df)
-
         current_end -= timedelta(days=chunk_days)
         time.sleep(0.4)  # respect IB pacing limit
 
