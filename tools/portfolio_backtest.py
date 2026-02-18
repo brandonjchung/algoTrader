@@ -33,8 +33,8 @@ STRATEGIES = {
         'weight': 0.5,
     },
     'trend_follow': {
-        'config': 'config/strategies/development/tf_cal_combined.yaml',
-        'label': 'Trend Following (V2)',
+        'config': 'config/strategies/development/tf_v2_final.yaml',
+        'label': 'Trend Following (V2 Final)',
         'weight': 0.5,
     },
 }
