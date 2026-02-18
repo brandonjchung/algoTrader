@@ -68,7 +68,7 @@ def approx_expiry(year, month):
     return third_friday
 
 
-def download_contract_history(ib, symbol, year, month, chunk_days=5):
+def download_contract_history(ib, symbol, year, month, multiplier, chunk_days=5):
     """
     Download all 5-min bars for one quarterly contract.
     Walks backwards from expiry in weekly chunks.
@@ -81,15 +81,18 @@ def download_contract_history(ib, symbol, year, month, chunk_days=5):
         symbol=symbol,
         exchange='CME',
         currency='USD',
+        multiplier=multiplier,
         lastTradeDateOrContractMonth=contract_month,
         includeExpired=True,
     )
 
-    # Qualify the contract to get full details
+    # Qualify to confirm IB recognises this contract -- skip if unknown
     try:
-        ib.qualifyContracts(contract)
+        qualified = ib.qualifyContracts(contract)
+        if not qualified:
+            return None
     except Exception:
-        pass  # will try anyway
+        return None
 
     # Download period: 3 months before expiry (the front-month liquid period)
     expiry = approx_expiry(year, month)
@@ -100,6 +103,7 @@ def download_contract_history(ib, symbol, year, month, chunk_days=5):
 
     all_frames = []
     current_end = expiry
+    consecutive_failures = 0
 
     while current_end > period_start:
         end_str = current_end.strftime('%Y%m%d %H:%M:%S') + ' US/Eastern'
@@ -114,8 +118,11 @@ def download_contract_history(ib, symbol, year, month, chunk_days=5):
                 formatDate=1,
                 keepUpToDate=False,
             )
+            consecutive_failures = 0
         except Exception as e:
-            print(f"\n    chunk error: {e}")
+            consecutive_failures += 1
+            if consecutive_failures >= 3:
+                break  # give up on this contract after 3 consecutive failures
             bars = []
 
         if bars:
@@ -148,6 +155,8 @@ def main():
                              '4002=Gateway paper, 4001=Gateway live)')
     parser.add_argument('--client-id', type=int, default=10,
                         help='IB API client ID (default: 10)')
+    parser.add_argument('--multiplier', default='5',
+                        help='Contract multiplier (default: 5 for MES, 50 for ES)')
     args = parser.parse_args()
 
     try:
@@ -188,7 +197,7 @@ def main():
                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month]
         print(f"[{i}/{len(quarterly)}] Downloading {args.symbol} {month_name} {year}...", end=' ', flush=True)
 
-        df = download_contract_history(ib, args.symbol, year, month)
+        df = download_contract_history(ib, args.symbol, year, month, args.multiplier)
 
         if df is not None and len(df) > 0:
             all_frames.append(df)
