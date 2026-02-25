@@ -32,6 +32,15 @@ import os
 import sys
 from datetime import datetime, timedelta
 
+# Python 3.14+ compatibility: create event loop before ib_insync import
+import asyncio
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    # Python 3.14+ requires explicit event loop creation
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
 import pandas as pd
 
 
