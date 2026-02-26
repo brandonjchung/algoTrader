@@ -50,19 +50,11 @@ def run_strategy_comparison(data_file):
             'class': AdaptiveMarketStrategy,
         },
         {
-            'name': 'Volume Spike Reversal',
-            'config_path': 'config/strategies/development/volume_spike_reversal.yaml',
+            'name': 'Volume Spike Reversal (PRODUCTION)',
+            'config_path': 'config/strategies/production/volume_spike_reversal.yaml',
             'class': VolumeSpikeReversalStrategy,
         },
     ]
-
-    # Backtester config for Volume Spike (simplified - no full config)
-    simple_backtest_config = {
-        'trading': {'initial_capital': 10000, 'position_size': 1, 'max_positions': 1},
-        'contract': {'tick_size': 0.25, 'tick_value': 1.25, 'point_value': 5.0},
-        'costs': {'commission_per_side': 0.60, 'slippage_ticks': 1},
-        'risk': {'max_risk_per_trade_pct': 1.0, 'max_daily_loss_pct': 2.0},
-    }
 
     results = []
 
@@ -82,11 +74,8 @@ def run_strategy_comparison(data_file):
             df_with_signals = strategy.generate_signals(data)
 
             # Initialize backtester with data that has signals
-            # For production configs, use full config; for Volume Spike use simple config
-            if 'production' in strat_info['config_path']:
-                bt = Backtester(strategy, df_with_signals, config)
-            else:
-                bt = Backtester(strategy, df_with_signals, simple_backtest_config)
+            # All are production configs now
+            bt = Backtester(strategy, df_with_signals, config)
 
             # Run backtest (no arguments needed)
             print("Running backtest...")
