@@ -96,7 +96,8 @@ def run_optimization(data_file, output_file='optimization_results.csv'):
             bt = Backtester(strategy, df_with_signals, backtest_config)
 
             # Run backtest (no arguments needed)
-            results_dict = bt.run()
+            bt_results = bt.run()
+            metrics = bt_results['metrics']
 
             # Store results
             result_row = {
@@ -105,13 +106,13 @@ def run_optimization(data_file, output_file='optimization_results.csv'):
                 'bb_std_mult': config['bb_std_mult'],
                 'stop_loss_atr_multiple': config['stop_loss_atr_multiple'],
                 'take_profit_atr_multiple': config['take_profit_atr_multiple'],
-                'total_return_pct': results_dict['total_return'],
-                'sharpe_ratio': results_dict['sharpe_ratio'],
-                'profit_factor': results_dict['profit_factor'],
-                'win_rate': results_dict['win_rate'],
-                'max_drawdown_pct': results_dict['max_drawdown'],
-                'total_trades': results_dict['total_trades'],
-                'avg_trade_pnl': results_dict['avg_trade'],
+                'total_return_pct': metrics['total_return_pct'],
+                'sharpe_ratio': metrics['sharpe_ratio'],
+                'profit_factor': metrics['profit_factor'],
+                'win_rate': metrics['win_rate_pct'],
+                'max_drawdown_pct': metrics['max_drawdown_pct'],
+                'total_trades': metrics['total_trades'],
+                'avg_trade_pnl': metrics['avg_trade'],
             }
             results.append(result_row)
 
