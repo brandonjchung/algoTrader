@@ -88,13 +88,15 @@ def run_optimization(data_file, output_file='optimization_results.csv'):
         # Run backtest
         try:
             strategy = VolumeSpikeReversalStrategy(config)
-            bt = Backtester(strategy, data, backtest_config)
 
-            # Generate signals
+            # Generate signals FIRST
             df_with_signals = strategy.generate_signals(data)
 
-            # Run backtest
-            results_dict = bt.run(df_with_signals)
+            # Initialize backtester with data that has signals
+            bt = Backtester(strategy, df_with_signals, backtest_config)
+
+            # Run backtest (no arguments needed)
+            results_dict = bt.run()
 
             # Store results
             result_row = {
