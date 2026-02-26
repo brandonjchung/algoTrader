@@ -47,6 +47,9 @@ class VolumeSpikeReversalStrategy:
         self.trades_today = 0
         self.last_trade_date = None
 
+    def get_name(self):
+        return self.name
+
     def calculate_indicators(self, data):
         df = data.copy()
 
