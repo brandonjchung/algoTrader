@@ -90,30 +90,31 @@ def run_strategy_comparison(data_file):
 
             # Run backtest (no arguments needed)
             print("Running backtest...")
-            results_dict = bt.run()
+            bt_results = bt.run()
+            metrics = bt_results['metrics']
 
             # Print summary
             print("\nResults:")
-            print(f"  Total Return:    {results_dict['total_return']:>8.2f}%")
-            print(f"  Win Rate:        {results_dict['win_rate']:>8.1f}%")
-            print(f"  Profit Factor:   {results_dict['profit_factor']:>8.2f}")
-            print(f"  Sharpe Ratio:    {results_dict['sharpe_ratio']:>8.2f}")
-            print(f"  Max Drawdown:    {results_dict['max_drawdown']:>8.2f}%")
-            print(f"  Total Trades:    {results_dict['total_trades']:>8}")
-            print(f"  Avg Trade:       ${results_dict['avg_trade']:>8.2f}")
-            print(f"  Winners:         {results_dict['winning_trades']:>8}")
-            print(f"  Losers:          {results_dict['losing_trades']:>8}")
+            print(f"  Total Return:    {metrics['total_return_pct']:>8.2f}%")
+            print(f"  Win Rate:        {metrics['win_rate_pct']:>8.1f}%")
+            print(f"  Profit Factor:   {metrics['profit_factor']:>8.2f}")
+            print(f"  Sharpe Ratio:    {metrics['sharpe_ratio']:>8.2f}")
+            print(f"  Max Drawdown:    {metrics['max_drawdown_pct']:>8.2f}%")
+            print(f"  Total Trades:    {metrics['total_trades']:>8}")
+            print(f"  Avg Trade:       ${metrics['avg_trade']:>8.2f}")
+            print(f"  Winners:         {metrics['winning_trades']:>8}")
+            print(f"  Losers:          {metrics['losing_trades']:>8}")
 
             # Store for comparison
             results.append({
                 'Strategy': strat_info['name'],
-                'Return%': results_dict['total_return'],
-                'WinRate%': results_dict['win_rate'],
-                'ProfitFactor': results_dict['profit_factor'],
-                'SharpeRatio': results_dict['sharpe_ratio'],
-                'MaxDD%': results_dict['max_drawdown'],
-                'Trades': results_dict['total_trades'],
-                'AvgTrade$': results_dict['avg_trade'],
+                'Return%': metrics['total_return_pct'],
+                'WinRate%': metrics['win_rate_pct'],
+                'ProfitFactor': metrics['profit_factor'],
+                'SharpeRatio': metrics['sharpe_ratio'],
+                'MaxDD%': metrics['max_drawdown_pct'],
+                'Trades': metrics['total_trades'],
+                'AvgTrade$': metrics['avg_trade'],
                 'Status': 'SUCCESS'
             })
 
