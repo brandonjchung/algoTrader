@@ -1,0 +1,40 @@
+# Volume Spike Reversal Strategy
+# ================================
+# Hypothesis: Large volume spikes often mark exhaustion/climax moves.
+# When volume spikes 3x+ normal AND price extends beyond BB, fade it.
+#
+# Logic:
+#   - Wait for volume spike (3x+ average)
+#   - Price must be outside Bollinger Bands (overextended)
+#   - Enter counter-trend expecting reversion to mean
+#
+# This combines volume exhaustion + price overextension signals.
+
+strategy:
+  name: "volume_spike_reversal"
+
+  # Volume spike detection
+  volume_period: 20
+  volume_spike_threshold: 3.0  # 3x average volume
+
+  # Price overextension (Bollinger Bands)
+  bb_period: 20
+  bb_std_mult: 2.0
+
+  # ATR for stops/targets
+  atr_period: 14
+  min_atr_for_entry: 2.0
+  max_atr_for_entry: 8.0
+
+  # Risk management (counter-trend = tight stops)
+  stop_loss_atr_multiple: 1.5
+  take_profit_atr_multiple: 2.5
+  use_trailing_stop: false
+
+  # Time filters
+  allowed_hours: [14, 15, 16, 17, 18, 19, 20, 21]
+  max_trades_per_day: 4
+  max_bars_in_trade: 24
+
+logging:
+  log_file: "logs/volume_spike_reversal.log"

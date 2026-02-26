@@ -1,0 +1,47 @@
+# Mean Reversion - Expanded Hours
+# ================================
+# MR V2 works (55.6% WR, PF 1.13) but only got 9 trades in 3 months.
+# Original time filter: [13, 16, 21] = only 3 specific hours
+#
+# This expands to more hours while keeping the same MR logic:
+#   - RSI oversold/overbought
+#   - Bollinger Band extremes
+#   - Low volatility (ATR filter)
+#
+# Hypothesis: MR edge exists across more hours, not just 3 specific ones.
+
+strategy:
+  name: "adaptive_market"
+
+  # Mean reversion thresholds (unchanged from V2)
+  rsi_period: 14
+  rsi_oversold: 35
+  rsi_overbought: 65
+
+  bb_period: 20
+  bb_std_mult: 2.0
+  min_bb_width_pct: 0.5
+
+  # ATR filter (unchanged)
+  atr_period: 14
+  max_atr_for_entry: 5.0
+
+  # Volume filter (unchanged)
+  volume_period: 20
+  max_volume_ratio: 0.9
+
+  # Risk management (unchanged)
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 3.0
+  use_trailing_stop: false
+
+  # CHANGED: Expanded time filter
+  # Old: [13, 16, 21] (3 hours only)
+  # New: Include Asian session close, European open, US open, US close
+  allowed_hours: [12, 13, 14, 15, 16, 17, 18, 21, 22]
+
+  max_trades_per_day: 3
+  max_bars_in_trade: 48
+
+logging:
+  log_file: "logs/mr_expanded_hours.log"
