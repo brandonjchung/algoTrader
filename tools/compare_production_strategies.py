@@ -56,6 +56,14 @@ def run_strategy_comparison(data_file):
         },
     ]
 
+    # Backtester config for Volume Spike (simplified - no full config)
+    simple_backtest_config = {
+        'trading': {'initial_capital': 10000, 'position_size': 1, 'max_positions': 1},
+        'contract': {'tick_size': 0.25, 'tick_value': 1.25, 'point_value': 5.0},
+        'costs': {'commission_per_side': 0.60, 'slippage_ticks': 1},
+        'risk': {'max_risk_per_trade_pct': 1.0, 'max_daily_loss_pct': 2.0},
+    }
+
     results = []
 
     for strat_info in strategies:
@@ -70,7 +78,11 @@ def run_strategy_comparison(data_file):
             strategy = strat_info['class'](config['strategy'])
 
             # Initialize backtester
-            bt = Backtester(strategy, initial_capital=10000)
+            # For production configs, use full config; for Volume Spike use simple config
+            if 'production' in strat_info['config_path']:
+                bt = Backtester(strategy, data, config)
+            else:
+                bt = Backtester(strategy, data, simple_backtest_config)
 
             # Generate signals
             print("Generating signals...")
