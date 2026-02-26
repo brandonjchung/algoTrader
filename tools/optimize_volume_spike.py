@@ -61,6 +61,14 @@ def run_optimization(data_file, output_file='optimization_results.csv'):
         'use_trailing_stop': False,
     }
 
+    # Backtester config
+    backtest_config = {
+        'trading': {'initial_capital': 10000, 'position_size': 1, 'max_positions': 1},
+        'contract': {'tick_size': 0.25, 'tick_value': 1.25, 'point_value': 5.0},
+        'costs': {'commission_per_side': 0.60, 'slippage_ticks': 1},
+        'risk': {'max_risk_per_trade_pct': 1.0, 'max_daily_loss_pct': 2.0},
+    }
+
     # Generate all combinations
     param_names = list(param_grid.keys())
     param_values = list(param_grid.values())
@@ -80,7 +88,7 @@ def run_optimization(data_file, output_file='optimization_results.csv'):
         # Run backtest
         try:
             strategy = VolumeSpikeReversalStrategy(config)
-            bt = Backtester(strategy, initial_capital=10000)
+            bt = Backtester(strategy, data, backtest_config)
 
             # Generate signals
             df_with_signals = strategy.generate_signals(data)
