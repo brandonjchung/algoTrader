@@ -68,6 +68,7 @@ class BreakoutFadeStrategy:
     def generate_signals(self, data):
         df = self.calculate_indicators(data)
         df['signal'] = 0
+        df['entry_price'] = 0.0
 
         signals = {
             'total': 0,
@@ -110,6 +111,7 @@ class BreakoutFadeStrategy:
             if (prev_bar['low'] > prev_bar['breakout_low'] and
                 bar['low'] <= bar['breakout_low']):
                 df.at[df.index[i], 'signal'] = 1
+                df.at[df.index[i], 'entry_price'] = bar['close']
                 signals['long_fades'] += 1
                 signals['total'] += 1
                 self.trades_today += 1
@@ -118,6 +120,7 @@ class BreakoutFadeStrategy:
             elif (prev_bar['high'] < prev_bar['breakout_high'] and
                   bar['high'] >= bar['breakout_high']):
                 df.at[df.index[i], 'signal'] = -1
+                df.at[df.index[i], 'entry_price'] = bar['close']
                 signals['short_fades'] += 1
                 signals['total'] += 1
                 self.trades_today += 1

@@ -75,6 +75,7 @@ class VolumeSpikeReversalStrategy:
     def generate_signals(self, data):
         df = self.calculate_indicators(data)
         df['signal'] = 0
+        df['entry_price'] = 0.0
 
         signals = {
             'total': 0,
@@ -116,6 +117,7 @@ class VolumeSpikeReversalStrategy:
             # LONG: volume spike + close below lower BB (oversold exhaustion)
             if bar['close'] < bar['bb_lower']:
                 df.at[df.index[i], 'signal'] = 1
+                df.at[df.index[i], 'entry_price'] = bar['close']
                 signals['long_reversals'] += 1
                 signals['total'] += 1
                 self.trades_today += 1
@@ -123,6 +125,7 @@ class VolumeSpikeReversalStrategy:
             # SHORT: volume spike + close above upper BB (overbought exhaustion)
             elif bar['close'] > bar['bb_upper']:
                 df.at[df.index[i], 'signal'] = -1
+                df.at[df.index[i], 'entry_price'] = bar['close']
                 signals['short_reversals'] += 1
                 signals['total'] += 1
                 self.trades_today += 1
