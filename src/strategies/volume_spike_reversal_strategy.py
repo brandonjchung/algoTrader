@@ -76,6 +76,8 @@ class VolumeSpikeReversalStrategy:
         df = self.calculate_indicators(data)
         df['signal'] = 0
         df['entry_price'] = 0.0
+        df['stop_loss'] = 0.0
+        df['take_profit'] = 0.0
 
         signals = {
             'total': 0,
@@ -116,16 +118,22 @@ class VolumeSpikeReversalStrategy:
 
             # LONG: volume spike + close below lower BB (oversold exhaustion)
             if bar['close'] < bar['bb_lower']:
+                entry = bar['close']
                 df.at[df.index[i], 'signal'] = 1
-                df.at[df.index[i], 'entry_price'] = bar['close']
+                df.at[df.index[i], 'entry_price'] = entry
+                df.at[df.index[i], 'stop_loss'] = self.get_stop_loss(entry, 1, bar['atr'])
+                df.at[df.index[i], 'take_profit'] = self.get_take_profit(entry, 1, bar['atr'])
                 signals['long_reversals'] += 1
                 signals['total'] += 1
                 self.trades_today += 1
 
             # SHORT: volume spike + close above upper BB (overbought exhaustion)
             elif bar['close'] > bar['bb_upper']:
+                entry = bar['close']
                 df.at[df.index[i], 'signal'] = -1
-                df.at[df.index[i], 'entry_price'] = bar['close']
+                df.at[df.index[i], 'entry_price'] = entry
+                df.at[df.index[i], 'stop_loss'] = self.get_stop_loss(entry, -1, bar['atr'])
+                df.at[df.index[i], 'take_profit'] = self.get_take_profit(entry, -1, bar['atr'])
                 signals['short_reversals'] += 1
                 signals['total'] += 1
                 self.trades_today += 1

@@ -69,6 +69,8 @@ class BreakoutFadeStrategy:
         df = self.calculate_indicators(data)
         df['signal'] = 0
         df['entry_price'] = 0.0
+        df['stop_loss'] = 0.0
+        df['take_profit'] = 0.0
 
         signals = {
             'total': 0,
@@ -110,8 +112,11 @@ class BreakoutFadeStrategy:
             # FADE LONG (buy the breakdown)
             if (prev_bar['low'] > prev_bar['breakout_low'] and
                 bar['low'] <= bar['breakout_low']):
+                entry = bar['close']
                 df.at[df.index[i], 'signal'] = 1
-                df.at[df.index[i], 'entry_price'] = bar['close']
+                df.at[df.index[i], 'entry_price'] = entry
+                df.at[df.index[i], 'stop_loss'] = self.get_stop_loss(entry, 1, bar['atr'])
+                df.at[df.index[i], 'take_profit'] = self.get_take_profit(entry, 1, bar['atr'])
                 signals['long_fades'] += 1
                 signals['total'] += 1
                 self.trades_today += 1
@@ -119,8 +124,11 @@ class BreakoutFadeStrategy:
             # FADE SHORT (sell the breakout)
             elif (prev_bar['high'] < prev_bar['breakout_high'] and
                   bar['high'] >= bar['breakout_high']):
+                entry = bar['close']
                 df.at[df.index[i], 'signal'] = -1
-                df.at[df.index[i], 'entry_price'] = bar['close']
+                df.at[df.index[i], 'entry_price'] = entry
+                df.at[df.index[i], 'stop_loss'] = self.get_stop_loss(entry, -1, bar['atr'])
+                df.at[df.index[i], 'take_profit'] = self.get_take_profit(entry, -1, bar['atr'])
                 signals['short_fades'] += 1
                 signals['total'] += 1
                 self.trades_today += 1
