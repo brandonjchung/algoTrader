@@ -1,0 +1,37 @@
+# Breakout Fade Strategy
+# ======================
+# Hypothesis: TF failed because breakouts immediately reversed.
+# Instead of BUYING breakouts, FADE them (sell high breakouts, buy low breakouts).
+#
+# Logic: When price breaks above 20-bar high, short it expecting fade back.
+#        When price breaks below 20-bar low, long it expecting bounce.
+#
+# Filters:
+#   - Volume must be elevated (1.5x avg) = exhaustion move
+#   - Use tight stops (1.5 ATR) since we're counter-trend
+#   - Target quick mean reversion (2 ATR)
+
+strategy:
+  name: "breakout_fade"
+
+  # Breakout detection
+  breakout_period: 20
+
+  # Entry filters
+  min_volume_ratio: 1.5  # require elevated volume = exhaustion
+  atr_period: 14
+  min_atr_for_entry: 2.0
+  max_atr_for_entry: 8.0
+
+  # Risk management (tighter than TF since counter-trend)
+  stop_loss_atr_multiple: 1.5
+  take_profit_atr_multiple: 2.0
+  use_trailing_stop: false
+
+  # Time filter - avoid overnight gaps
+  allowed_hours: [14, 15, 16, 17, 18, 19, 20]
+  max_trades_per_day: 3
+  max_bars_in_trade: 24  # exit after 2 hours if nothing happens
+
+logging:
+  log_file: "logs/breakout_fade.log"

@@ -22,6 +22,8 @@ from strategies.statistical_arbitrage import StatisticalArbitrage
 from strategies.adaptive_market_strategy import AdaptiveMarketStrategy
 from strategies.trend_following_strategy import TrendFollowingStrategy
 from strategies.ema_crossover_strategy import EMACrossoverStrategy
+from strategies.breakout_fade_strategy import BreakoutFadeStrategy
+from strategies.volume_spike_reversal_strategy import VolumeSpikeReversalStrategy
 from backtest.backtester import Backtester
 
 
@@ -223,6 +225,10 @@ def main():
         strategy = TrendFollowingStrategy(config['strategy'])
     elif strategy_name == 'ema_crossover':
         strategy = EMACrossoverStrategy(config['strategy'])
+    elif strategy_name == 'breakout_fade':
+        strategy = BreakoutFadeStrategy(config['strategy'])
+    elif strategy_name == 'volume_spike_reversal':
+        strategy = VolumeSpikeReversalStrategy(config['strategy'])
     else:
         print(f"ERROR: Unknown strategy: {strategy_name}")
         return
