@@ -77,20 +77,20 @@ def run_strategy_comparison(data_file):
             # Initialize strategy
             strategy = strat_info['class'](config['strategy'])
 
-            # Initialize backtester
-            # For production configs, use full config; for Volume Spike use simple config
-            if 'production' in strat_info['config_path']:
-                bt = Backtester(strategy, data, config)
-            else:
-                bt = Backtester(strategy, data, simple_backtest_config)
-
-            # Generate signals
+            # Generate signals FIRST
             print("Generating signals...")
             df_with_signals = strategy.generate_signals(data)
 
-            # Run backtest
+            # Initialize backtester with data that has signals
+            # For production configs, use full config; for Volume Spike use simple config
+            if 'production' in strat_info['config_path']:
+                bt = Backtester(strategy, df_with_signals, config)
+            else:
+                bt = Backtester(strategy, df_with_signals, simple_backtest_config)
+
+            # Run backtest (no arguments needed)
             print("Running backtest...")
-            results_dict = bt.run(df_with_signals)
+            results_dict = bt.run()
 
             # Print summary
             print("\nResults:")
@@ -114,18 +114,36 @@ def run_strategy_comparison(data_file):
                 'MaxDD%': results_dict['max_drawdown'],
                 'Trades': results_dict['total_trades'],
                 'AvgTrade$': results_dict['avg_trade'],
+                'Status': 'SUCCESS'
             })
 
         except Exception as e:
-            print(f"ERROR: {e}")
+            print(f"ERROR running {strat_info['name']}: {e}")
             import traceback
             traceback.print_exc()
+
+            # Store failed result for visibility
+            results.append({
+                'Strategy': strat_info['name'],
+                'Return%': 0.0,
+                'WinRate%': 0.0,
+                'ProfitFactor': 0.0,
+                'SharpeRatio': 0.0,
+                'MaxDD%': 0.0,
+                'Trades': 0,
+                'AvgTrade$': 0.0,
+                'Status': 'FAILED'
+            })
             continue
 
     # Print comparison table
     print("\n" + "=" * 80)
     print("STRATEGY COMPARISON")
     print("=" * 80)
+
+    if len(results) == 0:
+        print("ERROR: No strategies completed successfully!")
+        return None
 
     comparison_df = pd.DataFrame(results)
     print(comparison_df.to_string(index=False))
