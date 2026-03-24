@@ -3,7 +3,8 @@
 ## User Preferences
 - **Always prefer free/open-source tools** over paid alternatives
 - **Standard best practices** for all code (clean, documented, tested)
-- Dashboard built with Streamlit (free, open source): `streamlit run dashboard.py`
+- Dashboard built with Streamlit (free, open source): `python -m streamlit run dashboard.py`
+- **Proactively suggest workflow improvements** whenever you see an opportunity to make things more efficient (scripts, automation, shortcuts, tooling). Don't wait to be asked.
 
 ## Project Structure
 
@@ -208,6 +209,12 @@ Best variant (v2_strong) walk-forward:
 ## Common Commands
 
 ```bash
+# Run ALL production strategies at once (comparison table at the end)
+python tools/run_all_production.py <data-file>
+
+# Dashboard
+python -m streamlit run dashboard.py
+
 # Backtest (current best config = V2)
 python src/backtest/run_backtest.py --config config/strategies/production/mean_rev_quiet_filter.yaml --data-file <file>
 
