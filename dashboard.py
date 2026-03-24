@@ -157,6 +157,37 @@ if page == "Overview":
     fig.update_xaxes(autorange='reversed')
     st.plotly_chart(fig, use_container_width=True)
 
+    # Equity curves over time - best run per strategy
+    st.subheader("Strategy Performance Over Time")
+    st.caption("Best run per strategy - equity curves overlaid on same timeline")
+
+    fig_perf = go.Figure()
+    for strategy, best in best_per_strategy.items():
+        eq_file = best['filepath'].replace('backtest_', 'equity_curve_')
+        if os.path.exists(eq_file):
+            eq_df = load_csv(eq_file)
+            eq_df['time'] = pd.to_datetime(eq_df['time'])
+            # Convert to return % for apples-to-apples comparison
+            initial = eq_df['equity'].iloc[0]
+            eq_df['return_pct'] = ((eq_df['equity'] - initial) / initial) * 100
+            fig_perf.add_trace(go.Scatter(
+                x=eq_df['time'], y=eq_df['return_pct'],
+                mode='lines', name=strategy.replace('_', ' ').title(),
+                line=dict(width=2)
+            ))
+
+    fig_perf.update_layout(
+        height=500,
+        yaxis_title="Return %",
+        xaxis_title="Date",
+        hovermode='x unified',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    fig_perf.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    st.plotly_chart(fig_perf, use_container_width=True)
+
+    st.markdown("---")
+
     # Recent runs table
     st.subheader("Recent Backtest Runs")
     recent = df_all.head(20).copy()
