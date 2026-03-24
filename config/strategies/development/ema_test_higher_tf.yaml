@@ -1,0 +1,80 @@
+# EMA Upgrade 2: Higher timeframe (EMA 27 on 5-min ~ EMA 9 on 15-min)
+# ======================================================================
+# Hypothesis: EMA 9 on 5-min is too fast, catches noise.
+# EMA 9 on 15-min bars = EMA 27 on 5-min bars (equivalent smoothing).
+# This triples the lookback window, only catching sustained momentum shifts.
+#
+# Uses same strong-cross filters as v2_strong (best variant).
+# Change: ema_period: 27 (ONLY change from v2_strong)
+
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 2.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 60
+  avoid_last_minutes: 15
+  no_overnight: true
+
+strategy:
+  name: "ema_crossover"
+
+  # CHANGED: longer EMA (27 on 5-min ~ 9 on 15-min)
+  ema_period: 27
+  ema_slow_period: 0
+
+  # Same filters as v2_strong
+  min_cross_distance_pct: 0.25
+  min_volume_ratio: 1.3
+  volume_ma_period: 20
+  atr_period: 14
+  min_atr_for_entry: 10.0
+  max_atr_for_entry: 24.0
+
+  # ADX on
+  use_adx_filter: true
+  adx_period: 14
+  adx_min_threshold: 25
+
+  # Same risk as v2_strong
+  stop_loss_atr_multiple: 1.5
+  take_profit_atr_multiple: 4.0
+  allowed_hours: [9, 10, 11, 12, 13, 14, 15]
+  avoid_hours: []
+  max_trades_per_day: 2
+  max_consecutive_losses: 5
+  max_bars_in_trade: 48
+
+data:
+  source: "historical"
+  timeframe: "5min"
+
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/ema_test_higher_tf.log"

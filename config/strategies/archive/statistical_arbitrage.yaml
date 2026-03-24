@@ -1,0 +1,81 @@
+# Statistical Arbitrage Strategy Configuration
+# High win rate, tight stops, quick exits
+# Expected: 65-75% win rate, 200-400 trades/year
+
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 0.75   # Smaller risk per trade (high frequency)
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 15
+  avoid_last_minutes: 15
+  no_overnight: true
+
+strategy:
+  name: "statistical_arbitrage"
+
+  # Statistical Parameters
+  lookback_period: 50          # For Z-score calculation
+  zscore_entry: 2.0            # Enter at ±2 std deviations
+  zscore_exit: 0.5             # Exit when Z-score returns to ±0.5
+
+  # Bollinger Bands
+  bb_period: 20
+  bb_std: 2.0
+
+  # Fast RSI
+  rsi_period: 7                # Faster RSI (was 14)
+  rsi_extreme_long: 20         # Very oversold
+  rsi_extreme_short: 80        # Very overbought
+  rsi_neutral: 50
+
+  # Volatility
+  atr_period: 14
+
+  # Risk/Reward (TIGHT for high win rate)
+  stop_loss_atr_multiple: 1.0     # Tight stop
+  take_profit_atr_multiple: 1.5   # Quick profit
+  max_bars_in_trade: 20          # Quick exits
+
+  # Trade Management (HIGH FREQUENCY)
+  max_trades_per_day: 8          # More trades allowed
+  min_bars_between_trades: 2     # Can trade more frequently
+
+  # Circuit Breaker
+  max_consecutive_losses: 5
+
+data:
+  source: "realistic_simulator"
+  timeframe: "5min"
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/statistical_arbitrage.log"

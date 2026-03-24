@@ -1,0 +1,32 @@
+# TF V2 Final: 4.5x TP sweet spot + ADX 30 + no trailing stop
+# ============================================================
+# ES data: 4.5x and 4.0x have identical WR (53.85%) but 4.5x captures
+# 12% more per win ($191 vs $170). Sweet spot where extra profit is free.
+#
+# vs tf_cal_combined (6x TP): expect higher WR on MES (6x = 31.75% WR,
+# many trades fail to reach 6x target that would hit 4.5x).
+#
+# ES results: PF 2.41, 53.85% WR, avg win $191 vs avg loss $93
+
+strategy:
+  name: "trend_following"
+  breakout_period: 40
+  breakout_atr_buffer: 0.25
+  adx_period: 14
+  adx_min_threshold: 30
+  min_volume_ratio: 1.5
+  atr_period: 14
+  min_atr_for_entry: 3.0
+  max_atr_for_entry: 12.0
+  require_momentum_close: true
+  momentum_close_pct: 0.75
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 4.5
+  use_trailing_stop: false
+  allowed_hours: [14, 15, 16, 17, 18, 19, 20]
+  max_trades_per_day: 1
+  max_consecutive_losses: 4
+  max_bars_in_trade: 60
+
+logging:
+  log_file: "logs/tf_v2_final.log"

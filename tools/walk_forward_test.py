@@ -1,0 +1,426 @@
+"""
+Walk-Forward Testing Framework
+
+Implements systematic testing per claude.md methodology:
+- Split data into train/test/validate
+- Test strategy on each period
+- Ensure no look-ahead bias
+- Provide statistical validation
+"""
+
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import subprocess
+import json
+import os
+from pathlib import Path
+
+
+class WalkForwardTester:
+    """
+    Walk-forward testing framework for systematic strategy validation.
+    """
+
+    def __init__(self, data_file, config_file):
+        """
+        Initialize walk-forward tester.
+
+        Args:
+            data_file: Path to historical data CSV
+            config_file: Path to strategy config YAML
+        """
+        self.data_file = data_file
+        self.config_file = config_file
+        self.results = []
+
+        # Load data to determine date ranges
+        df = pd.read_csv(f"data/historical/{data_file}")
+        # Handle timezone-aware IB data
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+        # Convert to timezone-naive for easier handling
+        if df['timestamp'].dt.tz is not None:
+            df['timestamp'] = df['timestamp'].dt.tz_localize(None)
+
+        self.start_date = df['timestamp'].min()
+        self.end_date = df['timestamp'].max()
+        self.total_days = (self.end_date - self.start_date).days
+
+        print(f"Data loaded: {self.start_date.date()} to {self.end_date.date()}")
+        print(f"Total days: {self.total_days}")
+
+    def split_data(self, train_months=6, test_months=3, validate_months=3):
+        """
+        Split data into train/test/validate periods.
+
+        Args:
+            train_months: Months for training period
+            test_months: Months for testing period
+            validate_months: Months for validation period
+
+        Returns:
+            dict with period definitions
+        """
+        total_months = train_months + test_months + validate_months
+
+        # Calculate split points
+        train_end = self.start_date + timedelta(days=train_months * 30)
+        test_end = train_end + timedelta(days=test_months * 30)
+        validate_end = test_end + timedelta(days=validate_months * 30)
+
+        # Ensure we don't exceed data range
+        if validate_end > self.end_date:
+            print("[WARN]  Warning: Not enough data for full split")
+            # Adjust proportionally
+            total_available_days = self.total_days
+            train_days = int(total_available_days * (train_months / total_months))
+            test_days = int(total_available_days * (test_months / total_months))
+
+            train_end = self.start_date + timedelta(days=train_days)
+            test_end = train_end + timedelta(days=test_days)
+            validate_end = self.end_date
+
+        periods = {
+            'train': {
+                'start': self.start_date,
+                'end': train_end,
+                'purpose': 'Optimize parameters here (can iterate)'
+            },
+            'test': {
+                'start': train_end,
+                'end': test_end,
+                'purpose': 'Validate performance (compare variants)'
+            },
+            'validate': {
+                'start': test_end,
+                'end': validate_end,
+                'purpose': 'FINAL check (use ONCE only)'
+            }
+        }
+
+        return periods
+
+    def create_period_data(self, start_date, end_date, output_file):
+        """
+        Create a data file for a specific period.
+
+        Args:
+            start_date: Start date
+            end_date: End date
+            output_file: Output filename
+        """
+        # Load full dataset
+        df = pd.read_csv(f"data/historical/{self.data_file}")
+        # Handle timezone-aware IB data
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+        # Convert to timezone-naive for easier handling
+        if df['timestamp'].dt.tz is not None:
+            df['timestamp'] = df['timestamp'].dt.tz_localize(None)
+
+        # Filter to period
+        mask = (df['timestamp'] >= start_date) & (df['timestamp'] <= end_date)
+        df_period = df[mask]
+
+        # Save
+        output_path = f"data/historical/{output_file}"
+        df_period.to_csv(output_path, index=False)
+
+        print(f"  Created {output_file}: {len(df_period)} bars")
+        return output_path
+
+    def run_backtest(self, period_name, period_data_file):
+        """
+        Run backtest on a specific period.
+        Parses results directly from stdout for reliability.
+
+        Args:
+            period_name: Name of period (train/test/validate)
+            period_data_file: Data file for this period
+
+        Returns:
+            dict with results
+        """
+        print(f"\n{'='*60}")
+        print(f"Running backtest: {period_name.upper()}")
+        print(f"{'='*60}")
+
+        # Record timestamp before running so we only pick up NEW result files
+        import time
+        time_before = time.time()
+
+        # Run backtest
+        cmd = [
+            'python', 'src/backtest/run_backtest.py',
+            '--config', self.config_file,
+            '--data-file', period_data_file
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding='utf-8', errors='replace')
+
+        output = result.stdout + result.stderr
+
+        if result.returncode != 0:
+            print(f"  Backtest output:\n{output[:500]}")
+            print(f"  [FAIL] Backtest failed (exit code {result.returncode})")
+
+        # Parse results from stdout (more reliable than JSON file parsing)
+        metrics = self._parse_stdout_results(period_name, output)
+
+        if metrics and metrics['total_trades'] > 0:
+            print(f"  [OK] {metrics['total_trades']} trades, "
+                  f"{metrics['total_return_pct']:.2f}% return, "
+                  f"{metrics['win_rate']:.1f}% win rate")
+        else:
+            # Fallback: try to read JSON file
+            metrics = self._parse_json_results(period_name, time_before)
+
+            if metrics and metrics['total_trades'] > 0:
+                print(f"  [OK] {metrics['total_trades']} trades, "
+                      f"{metrics['total_return_pct']:.2f}% return")
+            else:
+                print(f"  [WARN]  0 trades generated for {period_name} period")
+                metrics = {
+                    'period': period_name,
+                    'total_return_pct': 0, 'sharpe_ratio': 0,
+                    'max_drawdown_pct': 0, 'total_trades': 0,
+                    'win_rate': 0, 'profit_factor': 0,
+                    'avg_win': 0, 'avg_loss': 0
+                }
+
+        return metrics
+
+    def _parse_stdout_results(self, period_name, output):
+        """Parse backtest results from stdout text."""
+        import re
+
+        metrics = {'period': period_name}
+
+        # Parse key metrics from the printed output
+        patterns = {
+            'total_return_pct': r'Total Return:\s+([-\d.]+)%',
+            'sharpe_ratio': r'Sharpe Ratio:\s+([-\d.]+)',
+            'max_drawdown_pct': r'Max Drawdown:\s+([-\d.]+)%',
+            'total_trades': r'Total Trades:\s+(\d+)',
+            'win_rate': r'Win Rate:\s+([-\d.]+)%',
+            'profit_factor': r'Profit Factor:\s+([-\d.]+)',
+            'avg_win': r'Avg Win: \$\s*([-\d.,]+)',
+            'avg_loss': r'Avg Loss: \$\s*([-\d.,]+)',
+        }
+
+        for key, pattern in patterns.items():
+            match = re.search(pattern, output)
+            if match:
+                val = match.group(1).replace(',', '')
+                metrics[key] = float(val) if '.' in val else int(val)
+            else:
+                metrics[key] = 0
+
+        return metrics if metrics.get('total_trades', 0) > 0 else None
+
+    def _parse_json_results(self, period_name, time_before):
+        """Fallback: parse results from JSON file."""
+        logs_dir = Path('logs')
+        result_files = sorted(
+            [f for f in logs_dir.glob('backtest_*.json')
+             if os.path.getmtime(f) > time_before],
+            key=os.path.getmtime, reverse=True
+        )
+
+        if not result_files:
+            return None
+
+        with open(result_files[0], 'r') as f:
+            results = json.load(f)
+
+        # Try flat structure first, then nested
+        metrics = {
+            'period': period_name,
+            'total_return_pct': results.get('total_return_pct', 0),
+            'sharpe_ratio': results.get('sharpe_ratio', 0),
+            'max_drawdown_pct': results.get('max_drawdown_pct', 0),
+            'total_trades': results.get('total_trades', 0),
+            'win_rate': results.get('win_rate_pct', results.get('win_rate', 0)),
+            'profit_factor': results.get('profit_factor', 0),
+            'avg_win': results.get('avg_win', 0),
+            'avg_loss': results.get('avg_loss', 0)
+        }
+
+        return metrics
+
+    def walk_forward_test(self):
+        """
+        Execute full walk-forward test.
+
+        Returns:
+            dict with results from all periods
+        """
+        print("\n" + "="*60)
+        print("WALK-FORWARD TESTING")
+        print("="*60)
+        print(f"\nStrategy: {self.config_file}")
+        print(f"Data: {self.data_file}")
+
+        # Split data
+        periods = self.split_data()
+
+        print(f"\n{'='*60}")
+        print("DATA SPLITS")
+        print("="*60)
+
+        for name, period in periods.items():
+            days = (period['end'] - period['start']).days
+            print(f"\n{name.upper()}:")
+            print(f"  {period['start'].date()} to {period['end'].date()} ({days} days)")
+            print(f"  Purpose: {period['purpose']}")
+
+        # Create period-specific data files
+        print(f"\n{'='*60}")
+        print("CREATING PERIOD DATA FILES")
+        print("="*60)
+
+        period_files = {}
+        for name, period in periods.items():
+            filename = f"wf_{name}_{self.data_file}"
+            self.create_period_data(period['start'], period['end'], filename)
+            period_files[name] = filename
+
+        # Run backtests on each period
+        results = {}
+        for name in ['train', 'test', 'validate']:
+            metrics = self.run_backtest(name, period_files[name])
+            if metrics:
+                results[name] = metrics
+
+        # Print summary
+        self.print_summary(results)
+
+        # Clean up period files
+        print(f"\n{'='*60}")
+        print("CLEANING UP")
+        print("="*60)
+        for filename in period_files.values():
+            os.remove(f"data/historical/{filename}")
+            print(f"  Removed {filename}")
+
+        return results
+
+    def print_summary(self, results):
+        """Print walk-forward test summary."""
+        print(f"\n{'='*60}")
+        print("WALK-FORWARD TEST RESULTS")
+        print("="*60)
+
+        # Table header
+        print(f"\n{'Period':<12} {'Return':<10} {'Sharpe':<8} {'Trades':<8} {'Win Rate':<10} {'PF':<8}")
+        print("-" * 60)
+
+        # Print results
+        for period in ['train', 'test', 'validate']:
+            if period not in results:
+                continue
+
+            r = results[period]
+            print(f"{period.capitalize():<12} "
+                  f"{r['total_return_pct']:>6.2f}%   "
+                  f"{r['sharpe_ratio']:>6.2f}  "
+                  f"{r['total_trades']:>6}  "
+                  f"{r['win_rate']:>6.1f}%     "
+                  f"{r['profit_factor']:>6.2f}")
+
+        # Machine-readable summary for component_test.py parsing
+        print(f"\nWF_SUMMARY_START")
+        for period in ['train', 'test', 'validate']:
+            if period in results:
+                r = results[period]
+                print(f"WF|{period}|{r['total_return_pct']:.2f}|{r['sharpe_ratio']:.2f}|{r['total_trades']}|{r['win_rate']:.1f}|{r['profit_factor']:.2f}")
+        print(f"WF_SUMMARY_END")
+
+        # Also write to JSON file for reliable cross-process communication
+        wf_output_file = os.environ.get('WF_OUTPUT_FILE')
+        if wf_output_file:
+            wf_json = {}
+            for period in ['train', 'test', 'validate']:
+                if period in results:
+                    r = results[period]
+                    wf_json[period] = {
+                        'return': r['total_return_pct'],
+                        'sharpe': r['sharpe_ratio'],
+                        'trades': r['total_trades'],
+                        'win_rate': r['win_rate'],
+                        'pf': r['profit_factor'],
+                    }
+            with open(wf_output_file, 'w') as f:
+                json.dump(wf_json, f)
+
+        # Analysis
+        print(f"\n{'='*60}")
+        print("ANALYSIS")
+        print("="*60)
+
+        if 'train' in results and 'test' in results:
+            train_ret = results['train']['total_return_pct']
+            test_ret = results['test']['total_return_pct']
+            degradation = train_ret - test_ret
+
+            print(f"\nTrain -> Test Degradation: {degradation:.2f}%")
+
+            if degradation < 2:
+                print("  [OK] Excellent - strategy generalizes well")
+            elif degradation < 5:
+                print("  [OK] Good - acceptable degradation")
+            elif degradation < 10:
+                print("  [WARN]  Warning - significant degradation, possible overfitting")
+            else:
+                print("  [FAIL] FAIL - severe degradation, likely overfit to train period")
+
+            # Sharpe comparison
+            train_sharpe = results['train']['sharpe_ratio']
+            test_sharpe = results['test']['sharpe_ratio']
+
+            print(f"\nSharpe Ratio Stability:")
+            print(f"  Train: {train_sharpe:.2f}")
+            print(f"  Test:  {test_sharpe:.2f}")
+
+            if test_sharpe >= train_sharpe * 0.8:
+                print("  [OK] Sharpe maintained - robust strategy")
+            else:
+                print("  [FAIL] Sharpe collapsed - not robust")
+
+        if 'validate' in results:
+            print(f"\nValidation Period (FINAL CHECK):")
+            val_ret = results['validate']['total_return_pct']
+            val_sharpe = results['validate']['sharpe_ratio']
+
+            print(f"  Return: {val_ret:.2f}%")
+            print(f"  Sharpe: {val_sharpe:.2f}")
+
+            if val_ret > 5 and val_sharpe > 1.0:
+                print("  [OK] PASS - Strategy approved for live trading consideration")
+            elif val_ret > 0 and val_sharpe > 0.5:
+                print("  [WARN]  MARGINAL - Strategy needs improvement")
+            else:
+                print("  [FAIL] FAIL - Strategy not ready for live trading")
+
+        print("\n" + "="*60 + "\n")
+
+
+def main():
+    """Run walk-forward test."""
+    import sys
+
+    if len(sys.argv) < 3:
+        print("Usage: python walk_forward_test.py <config_file> <data_file>")
+        print("\nExample:")
+        print("  python walk_forward_test.py config_adaptive_market.yaml MES_5mins_2025-02-14_to_2026-02-13_REAL.csv")
+        sys.exit(1)
+
+    config_file = sys.argv[1]
+    data_file = sys.argv[2]
+
+    tester = WalkForwardTester(data_file, config_file)
+    results = tester.walk_forward_test()
+
+
+if __name__ == '__main__':
+    main()

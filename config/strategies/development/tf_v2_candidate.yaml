@@ -1,0 +1,38 @@
+# TF V2 Production Candidate
+# ============================
+# Based on tf_cal_combined (PF 2.98, 11/13 WF windows profitable)
+# Adjustment: ADX 30 -> 28 to prevent 0-trade windows in lower-vol regimes
+#
+# Key changes from tf_mes_strict:
+#   use_trailing_stop: false  -- trailing stop was killing payoff ratio
+#   take_profit_atr_multiple: 6.0  -- let trends develop fully (was 4.0)
+#   adx_min_threshold: 28  -- strong trend required, not extreme (was 25)
+#   min_volume_ratio: 1.5  -- confirmed volume filter (unchanged)
+#   require_momentum_close: true  -- breakout bar must close in top 75% range
+#   max_trades_per_day: 1  -- only best setup per day
+#
+# ES data results (2020-2024): PF 2.98, 39T, 51% WR, avg win $257 vs avg loss $91
+# Rolling WF (18mo train / 6mo test): 11/13 profitable, avg PF 2.61, avg WR 72%
+
+strategy:
+  name: "trend_following"
+  breakout_period: 40
+  breakout_atr_buffer: 0.25
+  adx_period: 14
+  adx_min_threshold: 28
+  min_volume_ratio: 1.5
+  atr_period: 14
+  min_atr_for_entry: 3.0
+  max_atr_for_entry: 12.0
+  require_momentum_close: true
+  momentum_close_pct: 0.75
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 6.0
+  use_trailing_stop: false
+  allowed_hours: [14, 15, 16, 17, 18, 19, 20]
+  max_trades_per_day: 1
+  max_consecutive_losses: 4
+  max_bars_in_trade: 60
+
+logging:
+  log_file: "logs/tf_v2_candidate.log"

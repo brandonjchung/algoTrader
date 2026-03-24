@@ -15,19 +15,54 @@ import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from strategies.volatility_breakout import VolatilityBreakoutStrategy
+from strategies.mean_reversion_rsi import MeanReversionRSI
+from strategies.mean_reversion_improved import MeanReversionImproved
+from strategies.volatility_breakout_improved import VolatilityBreakoutImproved
+from strategies.statistical_arbitrage import StatisticalArbitrage
+from strategies.adaptive_market_strategy import AdaptiveMarketStrategy
+from strategies.trend_following_strategy import TrendFollowingStrategy
+from strategies.ema_crossover_strategy import EMACrossoverStrategy
+from strategies.breakout_fade_strategy import BreakoutFadeStrategy
+from strategies.volume_spike_reversal_strategy import VolumeSpikeReversalStrategy
 from backtest.backtester import Backtester
 
 
 def load_config(config_path: str) -> dict:
-    """Load configuration from YAML file."""
+    """Load configuration from YAML file.
+
+    Supports optional base config inheritance. If config/base.yaml exists,
+    it is loaded first and the strategy config is merged on top (strategy
+    values override base values). Standalone configs without a base still
+    work unchanged.
+    """
     if not os.path.exists(config_path):
         print(f"ERROR: Config file not found: {config_path}")
         return None
-    
+
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
-    
+
+    # Check for base config (optional - backwards compatible)
+    base_path = os.path.join('config', 'base.yaml')
+    if os.path.exists(base_path):
+        with open(base_path, 'r') as f:
+            base = yaml.safe_load(f)
+        # Deep merge: base provides defaults, strategy config overrides
+        merged = _deep_merge(base, config)
+        return merged
+
     return config
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge override dict into base dict. Override wins on conflicts."""
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 def load_data(filename: str) -> pd.DataFrame:
@@ -39,8 +74,17 @@ def load_data(filename: str) -> pd.DataFrame:
         return None
     
     data = pd.read_csv(filepath, index_col=0, parse_dates=True)
+
+    # Ensure index is datetime (fix for IB data format with timezone)
+    if not isinstance(data.index, pd.DatetimeIndex):
+        data.index = pd.to_datetime(data.index, utc=True)
+
+    # Remove timezone info if present (convert to timezone-naive)
+    if hasattr(data.index, 'tz') and data.index.tz is not None:
+        data.index = data.index.tz_localize(None)
+
     print(f"Loaded {len(data)} bars from {filepath}")
-    
+
     return data
 
 
@@ -58,21 +102,21 @@ def print_summary(results: dict, config: dict):
     print(f"Final Equity: ${metrics['final_equity']:,.2f}")
     
     print(f"\nPERFORMANCE")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     print(f"Total Return: {metrics['total_return_pct']:>10.2f}%")
     print(f"Total P&L: ${metrics['total_pnl']:>13,.2f}")
     print(f"Sharpe Ratio: {metrics['sharpe_ratio']:>11.2f}")
     print(f"Max Drawdown: {metrics['max_drawdown_pct']:>10.2f}%")
-    
+
     print(f"\nTRADE STATISTICS")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     print(f"Total Trades: {metrics['total_trades']:>12}")
     print(f"Winning Trades: {metrics['winning_trades']:>10}")
     print(f"Losing Trades: {metrics['losing_trades']:>11}")
     print(f"Win Rate: {metrics['win_rate_pct']:>16.2f}%")
-    
+
     print(f"\nPROFIT METRICS")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     print(f"Gross Profit: ${metrics['gross_profit']:>11,.2f}")
     print(f"Gross Loss: ${metrics['gross_loss']:>13,.2f}")
     print(f"Profit Factor: {metrics['profit_factor']:>11.2f}")
@@ -167,6 +211,24 @@ def main():
     
     if strategy_name == 'volatility_breakout':
         strategy = VolatilityBreakoutStrategy(config['strategy'])
+    elif strategy_name == 'mean_reversion_rsi':
+        strategy = MeanReversionRSI(config)
+    elif strategy_name == 'mean_reversion_improved':
+        strategy = MeanReversionImproved(config)
+    elif strategy_name == 'volatility_breakout_improved':
+        strategy = VolatilityBreakoutImproved(config)
+    elif strategy_name == 'statistical_arbitrage':
+        strategy = StatisticalArbitrage(config)
+    elif strategy_name == 'adaptive_market':
+        strategy = AdaptiveMarketStrategy(config['strategy'])
+    elif strategy_name == 'trend_following':
+        strategy = TrendFollowingStrategy(config['strategy'])
+    elif strategy_name == 'ema_crossover':
+        strategy = EMACrossoverStrategy(config['strategy'])
+    elif strategy_name == 'breakout_fade':
+        strategy = BreakoutFadeStrategy(config['strategy'])
+    elif strategy_name == 'volume_spike_reversal':
+        strategy = VolumeSpikeReversalStrategy(config['strategy'])
     else:
         print(f"ERROR: Unknown strategy: {strategy_name}")
         return

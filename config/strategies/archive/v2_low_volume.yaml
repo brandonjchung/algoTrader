@@ -1,0 +1,115 @@
+# V2: Low Volume Filter
+# CUMULATIVE CHANGE: V1_ATR + low volume entry filter
+#
+# Changes from V1 baseline (two validated improvements combined):
+#   1. use_volatility_filter: true, max_atr_for_entry: 5.0 (ADOPTED round 1)
+#      Evidence: Very High ATR quintile lost -$873, degradation eliminated
+#
+#   2. max_volume_ratio: 0.9 (CANDIDATE from round 4)
+#      Evidence: WR 48.8% -> 56.0%, PF 1.61 -> 2.29, MaxDD -3.70% -> -1.59%
+#      Rationale: Mean reversion works on quiet noise-driven extremes.
+#      Low-volume BB extremes = random drift that snaps back.
+#      High-volume BB extremes = momentum/news events that continue.
+#
+# Full backtest (training):    50 trades, +10.54%, WR 56.0%, PF 2.29, MaxDD -1.59%
+# Walk-forward train:         18 trades, +5.46%, PF 2.78
+# Walk-forward test (OOS):    20 trades, +3.52%, PF 2.18
+# Walk-forward validate:      11 trades, +0.10%, PF 1.10  <- concern; small sample
+#
+# STATUS: Candidate for adoption. Validate with fresh data before live trading.
+#
+# CHANGE LOG (vs v1_atr_filter.yaml):
+#   ADDED: max_volume_ratio: 0.9
+#   NOTHING ELSE CHANGED
+
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 2.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 60
+  avoid_last_minutes: 15
+  no_overnight: true
+
+strategy:
+  name: "adaptive_market"
+
+  rsi_period: 14
+  rsi_oversold: 35
+  rsi_overbought: 65
+  bb_period: 20
+  bb_std: 2.0
+
+  breakout_lookback: 20
+  breakout_strength: 0.2
+  volume_threshold: 1.2
+
+  adx_period: 14
+  trending_threshold: 20
+
+  atr_period: 14
+  stop_loss_atr_multiple: 3.0
+  take_profit_atr_multiple: 3.5
+
+  max_consecutive_losses: 5
+  max_daily_loss_pct: 2.0
+  max_trades_per_day: 3
+
+  allowed_hours: [13, 16, 21]
+  avoid_hours: [14, 17, 19]
+
+  max_bars_in_trade: 60
+  min_bars_between_trades: 5
+
+  # V1 improvement: ATR filter
+  use_volatility_filter: true
+  max_atr_for_entry: 5.0
+  min_atr_for_entry: 1.5
+
+  # V2 improvement: Low volume filter
+  max_volume_ratio: 0.9
+
+  # Off by default
+  min_volume_ratio: 0.0
+  min_bb_width_pct: 0.0
+  avoid_weekdays: []
+  short_require_strong_signal: false
+  short_min_bb_distance: 0.0
+  use_trailing_stop: false
+  use_adaptive_regime: false
+  track_recent_performance: false
+  use_atr_take_profit: false
+
+data:
+  source: "ib_real_data"
+  timeframe: "5min"
+
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/v2_low_volume.log"

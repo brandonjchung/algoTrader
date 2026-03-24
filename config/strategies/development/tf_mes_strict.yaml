@@ -1,0 +1,43 @@
+# TF MES Strict: Recalibrated for real MES data
+# =================================================
+# Problem: tf_test_wide_breakout on MES = 116 trades, PF 1.02 (-0.62%)
+# Payoff ratio near 1:1 despite 4x ATR target -> trailing stop cutting winners
+# ADX 20 too permissive -> entering marginal trends
+#
+# Changes from tf_test_wide_breakout:
+#   adx_min_threshold: 20 -> 25  (require stronger trend)
+#   min_volume_ratio: 1.2 -> 1.5  (require stronger volume confirmation)
+#   require_momentum_close: true  (bar must close in top 75% of range)
+#   max_trades_per_day: 2 -> 1  (only best setup per day)
+#   trailing_stop_atr: 2.0 -> 2.5  (let winners breathe more)
+#   max_bars_in_trade: 48 -> 60  (give trend more time to develop)
+
+strategy:
+  name: "trend_following"
+
+  breakout_period: 40
+  breakout_atr_buffer: 0.25
+
+  adx_period: 14
+  adx_min_threshold: 25
+  min_volume_ratio: 1.5
+  atr_period: 14
+  min_atr_for_entry: 3.0
+  max_atr_for_entry: 12.0
+
+  require_momentum_close: true
+  momentum_close_pct: 0.75
+
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 4.0
+  use_trailing_stop: true
+  trailing_stop_atr: 2.5
+
+  allowed_hours: [14, 15, 16, 17, 18, 19, 20]
+  avoid_hours: []
+  max_trades_per_day: 1
+  max_consecutive_losses: 4
+  max_bars_in_trade: 60
+
+logging:
+  log_file: "logs/tf_mes_strict.log"

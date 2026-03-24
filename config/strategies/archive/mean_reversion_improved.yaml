@@ -1,0 +1,79 @@
+# IMPROVED Mean Reversion Strategy Configuration
+# Based on analysis of 3,300 trades
+# Key fixes: LONG-ONLY, Circuit breaker, ADX filter, Better time filters
+
+trading:
+  symbol: "MES"
+  initial_capital: 10000
+  position_size: 1
+  max_positions: 1
+
+contract:
+  tick_size: 0.25
+  tick_value: 1.25
+  point_value: 5.0
+  margin_requirement: 1200
+
+costs:
+  commission_per_side: 0.60
+  slippage_ticks: 1
+
+risk:
+  max_risk_per_trade_pct: 1.0
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 15.0
+  risk_free_rate: 0.05
+
+time_filters:
+  trade_only_rth: true
+  avoid_first_minutes: 90  # Avoid first 1.5 hours (was 15 min)
+  avoid_last_minutes: 15
+  no_overnight: true
+
+strategy:
+  name: "mean_reversion_improved"
+
+  # RSI Settings (TIGHTER)
+  rsi_period: 14
+  rsi_oversold: 25        # Tighter (was 30)
+  rsi_neutral: 55          # Higher exit (was 50)
+
+  # EMA Settings
+  ema_fast: 20
+  ema_slow: 50
+
+  # Regime Detection (CRITICAL FIX)
+  adx_period: 14
+  adx_threshold: 25        # Don't trade if ADX > 25 (trending market)
+
+  # Volatility
+  atr_period: 14
+
+  # Risk/Reward (WIDER stops)
+  stop_loss_atr_multiple: 2.0    # Wider (was 1.5)
+  take_profit_atr_multiple: 3.0  # Same
+
+  # Trade Management
+  max_bars_in_trade: 40
+  max_trades_per_day: 3
+  min_bars_between_trades: 5
+
+  # Circuit Breaker (CRITICAL FIX)
+  max_consecutive_losses: 5  # Stop trading after 5 losses
+
+data:
+  source: "realistic_simulator"
+  timeframe: "5min"
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+
+backtest:
+  walk_forward: false
+  save_trades: true
+  save_equity_curve: true
+  generate_report: true
+
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/mean_reversion_improved.log"
