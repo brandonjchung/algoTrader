@@ -1,5 +1,10 @@
 # AlgoTrader Development Methodology
 
+## User Preferences
+- **Always prefer free/open-source tools** over paid alternatives
+- **Standard best practices** for all code (clean, documented, tested)
+- Dashboard built with Streamlit (free, open source): `streamlit run dashboard.py`
+
 ## Project Structure
 
 ```

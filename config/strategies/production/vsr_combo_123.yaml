@@ -1,0 +1,24 @@
+# Volume Spike Reversal - Combo #123
+# 10.04% return, 52.27% WR, PF 3.41, MaxDD -0.71%, 44 trades
+# Tight stop (1.0 ATR) with moderate target (3.0 ATR)
+# Same trade count as #124 but slightly lower target
+
+strategy:
+  name: "volume_spike_reversal"
+  volume_spike_threshold: 4.0
+  volume_lookback: 20
+  bb_period: 20
+  bb_std_mult: 2.0
+  atr_period: 14
+  stop_loss_atr_multiple: 1.0
+  take_profit_atr_multiple: 3.0
+  max_bars_in_trade: 60
+  max_trades_per_day: 1
+  max_consecutive_losses: 4
+  allowed_hours: [13, 14, 15, 16, 17, 18, 19, 20, 21]
+  use_volatility_filter: true
+  max_atr_for_entry: 8.0
+  min_atr_for_entry: 1.0
+
+logging:
+  log_file: "logs/vsr_combo_123.log"
