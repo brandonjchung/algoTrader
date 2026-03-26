@@ -77,42 +77,18 @@ class IBConnection:
             self.connected = False
             print("Disconnected from IB")
 
-    def create_futures_contract(self, symbol='MES', exchange='CME', currency='USD',
-                                continuous=False):
+    def create_futures_contract(self, symbol='MES', exchange='CME', currency='USD'):
         """
-        Create a futures contract.
+        Create a futures contract (nearest expiry).
 
         Args:
             symbol: MES, ES, NQ, etc.
             exchange: CME, NYMEX, etc.
             currency: USD
-            continuous: If True, use continuous contract (CONTFUT) for long
-                        historical data pulls that span multiple contract months.
 
         Returns:
             Contract object
         """
-        if continuous:
-            # Continuous futures automatically stitch together the correct
-            # contract months, so historical data works across roll dates.
-            contract = Contract()
-            contract.symbol = symbol
-            contract.secType = 'CONTFUT'
-            contract.exchange = exchange
-            contract.currency = currency
-
-            print(f"\nGetting continuous contract details for {symbol}...")
-            details = self.ib.reqContractDetails(contract)
-
-            if not details:
-                print(f"Could not find continuous contract for {symbol}")
-                return None
-
-            contract = details[0].contract
-            print(f"Using continuous contract: {contract.localSymbol}")
-            return contract
-
-        # Standard: get nearest expiry
         contract = Contract()
         contract.symbol = symbol
         contract.secType = 'FUT'
@@ -131,6 +107,60 @@ class IBConnection:
         print(f"Using contract: {contract.localSymbol}")
         print(f"   Expiry: {contract.lastTradeDateOrContractMonth}")
 
+        return contract
+
+    def _get_quarterly_expiries(self, symbol, start_date, end_date):
+        """
+        Generate quarterly contract expiry months covering a date range.
+
+        CME micro futures (MES, MNQ, etc.) roll quarterly:
+        H=March, M=June, U=September, Z=December
+
+        Returns list of (year, month) tuples for lastTradeDateOrContractMonth.
+        """
+        # Quarterly months in calendar order
+        quarters = [3, 6, 9, 12]
+        month_codes = {3: 'H', 6: 'M', 9: 'U', 12: 'Z'}
+
+        expiries = []
+        # Start from the quarter before start_date to ensure coverage
+        y = start_date.year
+        m = start_date.month
+
+        # Find the quarter at or before start_date
+        prev_q = max([q for q in quarters if q <= m], default=12)
+        if prev_q == 12 and m < 12:
+            y -= 1
+        start_y, start_q = y, prev_q
+
+        # Generate quarters through end_date + 1 quarter for coverage
+        current = datetime(start_y, start_q, 1)
+        end_plus = end_date + timedelta(days=100)  # buffer past end
+
+        while current <= end_plus:
+            expiry_str = f"{current.year}{current.month:02d}"
+            code = month_codes[current.month]
+            local_sym = f"{symbol}{code}{current.year % 10}"
+            expiries.append((expiry_str, local_sym))
+
+            # Advance to next quarter
+            next_month = current.month + 3
+            next_year = current.year
+            if next_month > 12:
+                next_month -= 12
+                next_year += 1
+            current = datetime(next_year, next_month, 1)
+
+        return expiries
+
+    def _create_contract_for_expiry(self, symbol, expiry_str, exchange='CME', currency='USD'):
+        """Create a FUT contract for a specific expiry month."""
+        contract = Contract()
+        contract.symbol = symbol
+        contract.secType = 'FUT'
+        contract.exchange = exchange
+        contract.currency = currency
+        contract.lastTradeDateOrContractMonth = expiry_str
         return contract
 
     def _parse_duration_to_months(self, duration_str):
@@ -160,7 +190,11 @@ class IBConnection:
         """
         Download historical data from IB with auto-chunking for large requests.
 
-        Automatically breaks large requests into 3-month chunks to avoid timeouts.
+        For durations > 6 months, automatically downloads from each quarterly
+        contract month separately and stitches together (avoids the IB limitation
+        where a single contract doesn't have data before its listing date).
+
+        For shorter durations, uses the provided contract directly.
 
         Args:
             contract: IB Contract object
@@ -181,37 +215,48 @@ class IBConnection:
         try:
             total_months = self._parse_duration_to_months(duration)
         except ValueError as e:
-            print(f"❌ {e}")
+            print(f"Error: {e}")
             return None
 
-        # Determine chunk size (3 months is safe for 5min bars)
-        chunk_months = 3
-
-        # If request is small enough, download directly
-        if total_months <= chunk_months:
+        # For short durations, download directly from the provided contract
+        if total_months <= 6:
             print(f"  Downloading in single request...")
             return self._download_single_chunk(
                 contract, duration, bar_size, what_to_show, use_rth
             )
 
-        # Large request - chunk it
-        num_chunks = (total_months + chunk_months - 1) // chunk_months
-        print(f"  Large request detected: Breaking into {num_chunks} chunks of {chunk_months} months each")
+        # For long durations, download per contract month to span roll dates
+        symbol = contract.symbol
+        exchange = contract.exchange
+        currency = contract.currency
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=total_months * 30.5)
+
+        expiries = self._get_quarterly_expiries(symbol, start_date, end_date)
+        print(f"  Spanning {total_months} months across {len(expiries)} quarterly contracts")
 
         all_data = []
-        end_date = datetime.now()
 
-        for chunk_num in range(num_chunks):
-            chunk_duration = f"{chunk_months} M"
-
-            print(f"\n  Chunk {chunk_num + 1}/{num_chunks}: Downloading {chunk_months} months ending {end_date.strftime('%Y-%m-%d')}...")
+        for idx, (expiry_str, local_sym) in enumerate(expiries):
+            print(f"\n  [{idx + 1}/{len(expiries)}] Downloading {local_sym} (expiry {expiry_str})...")
 
             try:
-                # Download chunk
+                # Create contract for this specific expiry
+                c = self._create_contract_for_expiry(symbol, expiry_str, exchange, currency)
+
+                # Qualify it with IB to get full contract details
+                qualified = self.ib.qualifyContracts(c)
+                if not qualified:
+                    print(f"    Could not qualify {local_sym} - skipping")
+                    continue
+
+                c = qualified[0]
+
+                # Download 3 months of data (one quarter)
                 bars = self.ib.reqHistoricalData(
-                    contract,
-                    endDateTime=end_date.strftime('%Y%m%d %H:%M:%S'),
-                    durationStr=chunk_duration,
+                    c,
+                    endDateTime='',  # Let IB determine based on contract
+                    durationStr='3 M',
                     barSizeSetting=bar_size,
                     whatToShow=what_to_show,
                     useRTH=use_rth,
@@ -219,42 +264,39 @@ class IBConnection:
                 )
 
                 if not bars:
-                    print(f"    ⚠️  No data returned for chunk {chunk_num + 1}")
+                    print(f"    No data for {local_sym}")
                     continue
 
-                # Convert to DataFrame
                 df_chunk = util.df(bars)
                 all_data.append(df_chunk)
 
-                print(f"    ✅ Downloaded {len(df_chunk)} bars")
-                print(f"       Range: {df_chunk['date'].min()} to {df_chunk['date'].max()}")
+                print(f"    Downloaded {len(df_chunk)} bars")
+                print(f"    Range: {df_chunk['date'].min()} to {df_chunk['date'].max()}")
 
-                # Update end date for next chunk (move back 3 months)
-                end_date = df_chunk['date'].min() - timedelta(seconds=1)
-
-                # Rate limit: wait between chunks
-                if chunk_num < num_chunks - 1:
-                    time.sleep(2)
+                # Rate limit between requests
+                if idx < len(expiries) - 1:
+                    time.sleep(3)
 
             except Exception as e:
-                print(f"    ❌ Error downloading chunk {chunk_num + 1}: {e}")
-                if chunk_num == 0:  # If first chunk fails, abort
-                    return None
-                # Otherwise continue with what we have
-                break
+                print(f"    Error downloading {local_sym}: {e}")
+                continue
 
         if not all_data:
-            print("❌ No data retrieved from any chunk")
+            print("No data retrieved from any contract month")
             return None
 
-        # Combine all chunks
-        print(f"\n  Combining {len(all_data)} chunks...")
+        # Combine all contract months
+        print(f"\n  Combining data from {len(all_data)} contract months...")
         df = pd.concat(all_data, ignore_index=True)
 
-        # Remove duplicates and sort
+        # Remove duplicates (overlap between contracts near roll dates) and sort
         df = df.drop_duplicates(subset=['date']).sort_values('date').reset_index(drop=True)
 
-        print(f"\n✅ Downloaded {len(df)} total bars")
+        # Filter to requested date range
+        cutoff = end_date - timedelta(days=total_months * 30.5)
+        df = df[df['date'] >= cutoff.strftime('%Y-%m-%d')].reset_index(drop=True)
+
+        print(f"\nDownloaded {len(df)} total bars")
         print(f"   Date Range: {df['date'].min()} to {df['date'].max()}")
         print(f"   Price Range: ${df['low'].min():.2f} to ${df['high'].max():.2f}")
 
@@ -431,8 +473,6 @@ if __name__ == "__main__":
                        help='Duration (default: 5 Y)')
     parser.add_argument('--bar-size', default='5 mins',
                        help='Bar size (default: 5 mins)')
-    parser.add_argument('--continuous', action='store_true',
-                       help='Use continuous contract (auto-enabled for >6M duration)')
     parser.add_argument('--setup', action='store_true',
                        help='Show setup guide')
 
@@ -453,19 +493,9 @@ if __name__ == "__main__":
             print("   python src/ib/ib_integration.py --setup")
             exit(1)
 
-        # Auto-enable continuous contract for durations > 6 months
-        use_continuous = args.continuous
-        try:
-            months = ib_conn._parse_duration_to_months(args.duration)
-            if months > 6 and not use_continuous:
-                print(f"\nDuration is {months} months — auto-enabling continuous contract")
-                print("  (needed to span multiple contract roll dates)")
-                use_continuous = True
-        except ValueError:
-            pass
-
-        # Create contract
-        contract = ib_conn.create_futures_contract(args.symbol, continuous=use_continuous)
+        # Create contract (nearest expiry — for long durations,
+        # download_historical_data handles per-contract-month downloading)
+        contract = ib_conn.create_futures_contract(args.symbol)
         if not contract:
             exit(1)
 
