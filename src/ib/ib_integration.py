@@ -77,7 +77,8 @@ class IBConnection:
             self.connected = False
             print("Disconnected from IB")
 
-    def create_futures_contract(self, symbol='MES', exchange='CME', currency='USD'):
+    def create_futures_contract(self, symbol='MES', exchange='CME', currency='USD',
+                                continuous=False):
         """
         Create a futures contract.
 
@@ -85,27 +86,49 @@ class IBConnection:
             symbol: MES, ES, NQ, etc.
             exchange: CME, NYMEX, etc.
             currency: USD
+            continuous: If True, use continuous contract (CONTFUT) for long
+                        historical data pulls that span multiple contract months.
 
         Returns:
             Contract object
         """
+        if continuous:
+            # Continuous futures automatically stitch together the correct
+            # contract months, so historical data works across roll dates.
+            contract = Contract()
+            contract.symbol = symbol
+            contract.secType = 'CONTFUT'
+            contract.exchange = exchange
+            contract.currency = currency
+
+            print(f"\nGetting continuous contract details for {symbol}...")
+            details = self.ib.reqContractDetails(contract)
+
+            if not details:
+                print(f"Could not find continuous contract for {symbol}")
+                return None
+
+            contract = details[0].contract
+            print(f"Using continuous contract: {contract.localSymbol}")
+            return contract
+
+        # Standard: get nearest expiry
         contract = Contract()
         contract.symbol = symbol
         contract.secType = 'FUT'
         contract.exchange = exchange
         contract.currency = currency
 
-        # Get nearest expiry
         print(f"\nGetting contract details for {symbol}...")
         details = self.ib.reqContractDetails(contract)
 
         if not details:
-            print(f"❌ No contracts found for {symbol}")
+            print(f"No contracts found for {symbol}")
             return None
 
         # Use first (nearest) contract
         contract = details[0].contract
-        print(f"✅ Using contract: {contract.localSymbol}")
+        print(f"Using contract: {contract.localSymbol}")
         print(f"   Expiry: {contract.lastTradeDateOrContractMonth}")
 
         return contract
@@ -408,6 +431,8 @@ if __name__ == "__main__":
                        help='Duration (default: 5 Y)')
     parser.add_argument('--bar-size', default='5 mins',
                        help='Bar size (default: 5 mins)')
+    parser.add_argument('--continuous', action='store_true',
+                       help='Use continuous contract (auto-enabled for >6M duration)')
     parser.add_argument('--setup', action='store_true',
                        help='Show setup guide')
 
@@ -428,8 +453,19 @@ if __name__ == "__main__":
             print("   python src/ib/ib_integration.py --setup")
             exit(1)
 
+        # Auto-enable continuous contract for durations > 6 months
+        use_continuous = args.continuous
+        try:
+            months = ib_conn._parse_duration_to_months(args.duration)
+            if months > 6 and not use_continuous:
+                print(f"\nDuration is {months} months — auto-enabling continuous contract")
+                print("  (needed to span multiple contract roll dates)")
+                use_continuous = True
+        except ValueError:
+            pass
+
         # Create contract
-        contract = ib_conn.create_futures_contract(args.symbol)
+        contract = ib_conn.create_futures_contract(args.symbol, continuous=use_continuous)
         if not contract:
             exit(1)
 
