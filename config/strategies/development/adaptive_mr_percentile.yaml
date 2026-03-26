@@ -1,0 +1,57 @@
+# STRATEGY: Adaptive Mean Reversion - Percentile-Based Filters
+# =============================================================
+# DEVELOPMENT - Testing adaptive thresholds that self-calibrate
+#
+# KEY CHANGE from production mean_rev_quiet_filter:
+#   OLD: max_atr_for_entry: 5.0 (absolute, breaks when regime shifts)
+#   NEW: max_atr_percentile: 75 (relative, adapts automatically)
+#
+#   OLD: max_volume_ratio: 0.9 (absolute)
+#   NEW: max_volume_percentile: 50 (relative)
+#
+# The adaptive_lookback window (500 bars = ~4 trading days) provides
+# enough history to compute stable percentiles while still responding
+# to regime changes within a week.
+#
+# HYPOTHESIS: Percentile-based filters will produce consistent results
+# across different data periods because they self-calibrate, unlike
+# fixed thresholds that degrade when ATR/volume distributions shift.
+
+strategy:
+  name: "adaptive_mean_reversion"
+
+  # Core signal (unchanged from V2)
+  rsi_period: 14
+  rsi_oversold: 35
+  rsi_overbought: 65
+  bb_period: 20
+  bb_std: 2.0
+  atr_period: 14
+
+  # ADAPTIVE FILTERS (the key innovation)
+  adaptive_lookback: 500       # Rolling window for percentile calc (~4 days)
+  max_atr_percentile: 75       # Trade when ATR below 75th percentile (calm markets)
+  min_atr_percentile: 10       # Skip dead markets (below 10th percentile)
+  max_volume_percentile: 50    # Trade when volume below median (quiet bars)
+
+  # Risk (ATR multiples are already relative)
+  stop_loss_atr_multiple: 3.0
+  take_profit_atr_multiple: 3.5
+  use_atr_take_profit: false   # false = target BB middle (mean reversion)
+
+  # Time filters - LOOSENED from V2
+  # Old: only 3 hours (13, 16, 21) — overfit to original data
+  # New: all RTH hours except first hour (volatile open) and last 15 min
+  # The adaptive percentile filters handle regime detection now
+  allowed_hours: [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+  avoid_hours: [9]   # First hour after open is too volatile
+  avoid_weekdays: []
+
+  # Risk limits
+  max_consecutive_losses: 5
+  max_daily_loss_pct: 2.0
+  max_trades_per_day: 3
+  max_bars_in_trade: 60
+
+logging:
+  log_file: "logs/adaptive_mr_percentile.log"

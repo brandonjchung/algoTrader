@@ -24,6 +24,7 @@ from strategies.trend_following_strategy import TrendFollowingStrategy
 from strategies.ema_crossover_strategy import EMACrossoverStrategy
 from strategies.breakout_fade_strategy import BreakoutFadeStrategy
 from strategies.volume_spike_reversal_strategy import VolumeSpikeReversalStrategy
+from strategies.adaptive_mean_reversion import AdaptiveMeanReversion
 from backtest.backtester import Backtester
 
 
@@ -229,6 +230,8 @@ def main():
         strategy = BreakoutFadeStrategy(config['strategy'])
     elif strategy_name == 'volume_spike_reversal':
         strategy = VolumeSpikeReversalStrategy(config['strategy'])
+    elif strategy_name == 'adaptive_mean_reversion':
+        strategy = AdaptiveMeanReversion(config['strategy'])
     else:
         print(f"ERROR: Unknown strategy: {strategy_name}")
         return
