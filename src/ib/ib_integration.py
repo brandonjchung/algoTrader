@@ -154,13 +154,14 @@ class IBConnection:
         return expiries
 
     def _create_contract_for_expiry(self, symbol, expiry_str, exchange='CME', currency='USD'):
-        """Create a FUT contract for a specific expiry month."""
+        """Create a FUT contract for a specific expiry month, including expired ones."""
         contract = Contract()
         contract.symbol = symbol
         contract.secType = 'FUT'
         contract.exchange = exchange
         contract.currency = currency
         contract.lastTradeDateOrContractMonth = expiry_str
+        contract.includeExpired = True
         return contract
 
     def _parse_duration_to_months(self, duration_str):
@@ -241,16 +242,16 @@ class IBConnection:
             print(f"\n  [{idx + 1}/{len(expiries)}] Downloading {local_sym} (expiry {expiry_str})...")
 
             try:
-                # Create contract for this specific expiry
+                # Create contract for this specific expiry (includeExpired=True)
                 c = self._create_contract_for_expiry(symbol, expiry_str, exchange, currency)
 
-                # Qualify it with IB to get full contract details
-                qualified = self.ib.qualifyContracts(c)
-                if not qualified:
-                    print(f"    Could not qualify {local_sym} - skipping")
+                # Use reqContractDetails which handles expired contracts better
+                details = self.ib.reqContractDetails(c)
+                if not details:
+                    print(f"    Could not find {local_sym} - skipping")
                     continue
 
-                c = qualified[0]
+                c = details[0].contract
 
                 # Download 3 months of data (one quarter)
                 bars = self.ib.reqHistoricalData(
