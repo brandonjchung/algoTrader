@@ -606,8 +606,8 @@ elif page == "Strategy Comparison":
     )
     st.plotly_chart(fig_radar, use_container_width=True)
 
-    # Overlay equity curves
-    st.subheader("Equity Curve Overlay")
+    # Overlay equity curves (normalized to return %)
+    st.subheader("Equity Curve Overlay (Return %)")
     fig_overlay = go.Figure()
 
     for item in comparison:
@@ -615,18 +615,37 @@ elif page == "Strategy Comparison":
         if os.path.exists(eq_file):
             eq_df = load_csv(eq_file)
             eq_df['time'] = pd.to_datetime(eq_df['time'])
+            initial = eq_df['equity'].iloc[0]
+            eq_df['return_pct'] = ((eq_df['equity'] - initial) / initial) * 100
+            label = f"{item['strategy']} ({item['return_pct']:+.1f}%)"
             fig_overlay.add_trace(go.Scatter(
-                x=eq_df['time'], y=eq_df['equity'],
-                mode='lines', name=item['strategy'],
+                x=eq_df['time'], y=eq_df['return_pct'],
+                mode='lines', name=label,
                 line=dict(width=2)
             ))
 
     fig_overlay.update_layout(
-        yaxis_title="Equity ($)",
-        height=400,
-        hovermode='x unified'
+        yaxis_title="Return %",
+        height=450,
+        hovermode='x unified',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
+    fig_overlay.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
     st.plotly_chart(fig_overlay, use_container_width=True)
+
+    # All runs comparison table
+    st.subheader("All Runs (Selected Strategies)")
+    all_selected = [b for b in backtests if b['strategy'] in selected_strategies]
+    all_df = pd.DataFrame(all_selected)
+    all_df['date'] = all_df['timestamp'].apply(format_timestamp)
+    st.dataframe(
+        all_df[['date', 'strategy', 'return_pct', 'win_rate', 'profit_factor',
+                'max_dd_pct', 'total_trades', 'sharpe']].sort_values(
+            'return_pct', ascending=False
+        ).reset_index(drop=True),
+        use_container_width=True,
+        hide_index=True
+    )
 
 
 # ============================================================
@@ -722,5 +741,5 @@ elif page == "Market Data":
 
 # --- Footer ---
 st.sidebar.markdown("---")
-st.sidebar.caption("AlgoTrader Dashboard v1.0")
+st.sidebar.caption("AlgoTrader Dashboard v1.1")
 st.sidebar.caption("Built with Streamlit (free & open source)")
