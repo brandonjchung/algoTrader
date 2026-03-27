@@ -80,7 +80,7 @@ strategy:
   take_profit_atr_multiple: 3.5      # 3.5x ATR target (let winners run)
 
   # Time filters
-  allowed_hours: [14, 15, 16, 17, 18, 19, 20, 21]  # RTH core hours
+  allowed_hours: [13, 14, 15, 16, 17, 18, 19, 20, 21]  # Full RTH core hours
   max_trades_per_day: 4
   max_bars_in_trade: 24              # Max 2 hours in trade
   min_bars_between_trades: 5

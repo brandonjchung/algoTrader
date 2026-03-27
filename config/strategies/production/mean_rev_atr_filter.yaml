@@ -66,8 +66,8 @@ strategy:
   max_daily_loss_pct: 2.0
   max_trades_per_day: 3
 
-  allowed_hours: [13, 16, 21]
-  avoid_hours: [14, 17, 19]
+  allowed_hours: [13, 14, 15, 16, 17, 18, 19, 20, 21]
+  avoid_hours: []
 
   max_bars_in_trade: 60
   min_bars_between_trades: 5
