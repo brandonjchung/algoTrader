@@ -37,3 +37,8 @@ Thumbs.db
 # Keep directory structure but not contents
 !data/historical/.gitkeep
 !logs/.gitkeep
+
+# Claude Code (local only)
+.claude/
+CLAUDE.md
+claude.md
